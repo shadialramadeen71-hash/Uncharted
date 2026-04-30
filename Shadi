@@ -1,0 +1,18 @@
+import time
+from IPython.display import clear_output
+
+# القصة مكررة 5 مرات حتى تلحق تشوفها
+for i in range(5):
+    scenes = [
+        ("🤑\n+$5000", "أنا ملك التداول! 💸"),
+        ("😴\nZzz...", "نوم الهنا.. السعر فوق 🛌"),
+        ("😱\n$0.00", "استيقظت على الكارثة! 📉"),
+        ("😭\nوااااااع", "تبخرت الأحلام! 💔")
+    ]
+
+    for emoji, text in scenes:
+        clear_output(wait=True)
+        print("\n" * 5) # لإبعاد النص عن الأزرار
+        print(f"      {emoji}      ")
+        print(f"      {text}      ")
+        time.sleep(3) # انتظر 3 ثواني لكل مشهد
