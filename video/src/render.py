@@ -32,6 +32,7 @@ CLIP_LINES = [(6.1, 6.6, "Good evening."),
               (12.3, 18.4, "that the United States has conducted an operation that killed Osama bin Laden,"),
               (18.9, 25.5, "the leader of al Qaeda, and a terrorist who's responsible for the murder of thousands of innocent men, women, and children.")]
 VINSON_SRC = 42.0
+MUSIC_A, MUSIC_B, MUSIC_SWITCH_SEG = "Hitman", "Volatile_Reaction", 15
 
 CREDIT_LINES = [
     "Photos & video: Wikimedia Commons. Public domain unless noted:",
@@ -40,7 +41,7 @@ CREDIT_LINES = [
     "PMA Gate - Hassanpak30 (CC BY-SA 3.0)   |   Compound photos - Sajjad Ali Qureshi (CC BY-SA 2.0 / CC BY 2.0)",
     "Times Square - Josh Pesavento (CC BY 2.0)   |   Washington DC - Bektour (CC BY-SA 3.0)",
     "9/11 Memorial - Paul Sableman (CC BY 2.0)   |   White House, U.S. Navy, U.S. Army, CIA, FBI, FEMA, NASA",
-    "Music: original 1930s-style swing composed for this video   |   Voices: Piper TTS",
+    "Music: \"Hitman\" & \"Volatile Reaction\" by Kevin MacLeod (incompetech.com), CC BY 4.0   |   Voices: Piper TTS",
 ]
 
 # ---------------------------------------------------------------- audio helpers
@@ -155,10 +156,21 @@ def mix_audio(segs, total, voice_items, path):
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(CLIP_SRC[0]), "-t", str(CLIP_SRC[1] - CLIP_SRC[0]), "-i", f"{MEDIA}/vid_obama.webm",
                     "-af", "loudnorm=I=-16:TP=-1.5,afade=t=in:d=0.15,afade=t=out:st=%f:d=0.3" % (CLIP_SRC[1] - CLIP_SRC[0] - 0.3), "-ar", str(SR), "-ac", "1", raw], check=True)
     a = read_wav(raw); i = int(sg["start"] * SR); clip[i:i + len(a)] += a
-    # music
-    mp = f"{S}/audio/music.wav"
-    subprocess.run(["python3", "-I", f"{S}/tools/music.py", mp, str(total + 1)], check=True)
-    music = read_wav(mp)[:n]; music = np.pad(music, (0, n - len(music)))
+    # music: Kevin MacLeod tracks (CC BY 4.0), suspense -> action at the SEAL Team Six section
+    music = np.zeros(n, np.float32)
+    switch = next(x for x in segs if x["i"] == MUSIC_SWITCH_SEG)["start"]
+    XF = 2.5
+    for (fn, t0, t1, src0) in ((MUSIC_A, 0.0, switch + XF, 0.0), (MUSIC_B, switch, total, 0.0)):
+        tmpm = f"{S}/audio/{fn}.wav"
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-ss", str(src0), "-t", str(t1 - t0 + 1), "-i", f"{S}/music/{fn}.mp3",
+                        "-af", "loudnorm=I=-16:TP=-2", "-ar", str(SR), "-ac", "1", tmpm], check=True)
+        m = read_wav(tmpm)[:int((t1 - t0) * SR)]
+        env = np.ones(len(m), np.float32)
+        f = int(XF * SR)
+        if t0 > 0: env[:f] = np.linspace(0, 1, f)
+        if t1 < total: env[-f:] = np.minimum(env[-f:], np.linspace(1, 0, f))
+        else: env[-int(4 * SR):] = np.minimum(env[-int(4 * SR):], np.linspace(1, 0, int(4 * SR)))
+        i = int(t0 * SR); music[i:i + len(m)] += (m * env)[:n - i]
     # ducking envelope
     act = np.abs(voice + cartoon)
     hop = 441
@@ -166,8 +178,8 @@ def mix_audio(segs, total, voice_items, path):
     speaking = np.convolve(blocks > 0.02, np.ones(60), "same") > 0  # within ~0.3s of speech
     clipon = np.zeros(len(blocks), bool)
     clipon[int(sg["start"] * 100):int((sg["start"] + sg["dur"]) * 100)] = True
-    target = np.where(clipon, 0.035, np.where(speaking, 0.11, 0.32))
-    g = np.zeros_like(target); cur = 0.32
+    target = np.where(clipon, 0.07, np.where(speaking, 0.26, 0.75))
+    g = np.zeros_like(target); cur = 0.75
     for j, v in enumerate(target):
         cur += (v - cur) * (0.25 if v < cur else 0.03); g[j] = cur
     gain = np.repeat(g, hop)[:n]
