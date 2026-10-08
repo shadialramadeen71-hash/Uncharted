@@ -1,0 +1,41 @@
+How Nazi Germany's army conquered most of Europe between 1938 and 1942, and how it collapsed by May 1945, told with animated maps of the changing front lines.
+
+Chapters:
+0:00 Intro
+0:10 The rise: Austria & Czechoslovakia
+0:32 Invasion of Poland (1939)
+0:48 Blitzkrieg in the West (1940)
+1:06 Battle of Britain
+1:15 Operation Barbarossa (1941)
+1:41 Greatest extent (1942)
+1:50 Stalingrad
+2:00 Kursk & Italy (1943)
+2:10 D-Day (1944)
+2:22 Bagration & the Bulge
+2:37 Fall of Berlin (1945)
+2:53 Aftermath
+
+Music:
+Gustav Holst – "Mars, the Bringer of War" (The Planets), performed by the United States Air Force Band. Public domain (work of the U.S. federal government).
+https://commons.wikimedia.org/wiki/File:Holst-_mars.ogg
+
+Photos (Wikimedia Commons):
+- Crowds in Vienna after the Anschluss, March 1938 — Heinrich Hoffmann — Public domain — https://commons.wikimedia.org/wiki/File:Anschluss_Heldenplatz1.jpg
+- German soldiers at the Polish border, September 1939 — Sönnke, Hans — CC BY-SA 3.0 de — https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_183-51909-0003,_Polen,_Schlagbaum,_deutsche_Soldaten.jpg
+- German troops at the Arc de Triomphe, Paris, June 1940 — Gutjahr — CC BY-SA 3.0 de — https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_101I-126-0347-09A,_Paris,_Deutsche_Truppen_am_Arc_de_Triomphe.jpg
+- A Spitfire and a German He 111 bomber, Battle of Britain, 1940 — Australian armed forces — Public domain — https://commons.wikimedia.org/wiki/File:Spitfire_and_He_111_during_Battle_of_Britain_1940.jpg
+- Soviet troops defending Moscow, 1941 — Knorring / Олег Кнорринг — CC BY-SA 3.0 — https://commons.wikimedia.org/wiki/File:RIAN_archive_887721_Defense_of_Moscow.jpg
+- The ruins of Stalingrad, winter 1942–43 — Zelma / Георгий Зельма — CC BY-SA 3.0 — https://commons.wikimedia.org/wiki/File:RIAN_archive_2251_Destroyed_Stalingrad_does_not_give_up.jpg
+- German Tiger tank at the Battle of Kursk, July 1943 — Zschäckel, Friedrich — CC BY-SA 3.0 de — https://commons.wikimedia.org/wiki/File:Bundesarchiv_Bild_101III-Zschaeckel-206-35,_Schlacht_um_Kursk,_Panzer_VI_(Tiger_I).jpg
+- American troops landing on Omaha Beach, 6 June 1944 — Chief Photographer's Mate (CPHoM) Robert F. Sargent — Public domain — https://commons.wikimedia.org/wiki/File:Into_the_Jaws_of_Death_23-0455M_edit.jpg
+- American paratroopers in the Ardennes, January 1945 — General Services Administration. National Archives and Records Service — Public domain — https://commons.wikimedia.org/wiki/File:Parachute_Infantry_Move_on_Snow-Covered_Ground_Toward_the_Front_to_Keep_Up_the_Pressure_Being_Applied_to_the_Germans_Beyond_St._Vith,_Belgium_-_DPLA_-_978cb65a6389ae65a1515aa4f125b81b.jpg
+- Soviet flag raised over the Reichstag, Berlin, May 1945 — Yevgeny Khaldei / Adam Cuerden — Public domain — https://commons.wikimedia.org/wiki/File:Raising_a_flag_over_the_Reichstag_-_Restoration.jpg
+- Churchill greets crowds in London on V-E Day, 8 May 1945 — War Office official photographer, Major W. G. Horton — Public domain — https://commons.wikimedia.org/wiki/File:Winston_Churchill_waves_to_crowds_in_Whitehall_in_London_as_they_celebrate_VE_Day,_8_May_1945._H41849.jpg
+
+Map data:
+- Historical borders: aourednik/historical-basemaps (world_1938) — https://github.com/aourednik/historical-basemaps
+- Natural Earth (public domain) — https://www.naturalearthdata.com
+
+Front lines and territories are simplified approximations for illustration.
+
+#WW2 #History #Europe #WorldWarII #Maps
