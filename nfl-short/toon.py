@@ -23,9 +23,11 @@ VOICE = {  # gTTS accent, pitch factor, tempo after pitch
     "zippy": ("com.au", 1.45, 0.88),
     "coach": ("ca", 0.8, 1.2),
     "spicy": ("co.in", 1.2, 1.0),
+    "ref": ("ie", 0.85, 1.1),
 }
 NAMES = {"narrator": ("NARRATOR", (40, 40, 50)), "tank": ("TANK", PURPLE), "zippy": ("ZIPPY", (235, 110, 20)),
-         "coach": ("COACH PANCAKE", (30, 110, 180)), "spicy": ("MR. SPICY", RED)}
+         "coach": ("COACH PANCAKE", (30, 110, 180)), "spicy": ("MR. SPICY", RED),
+         "ref": ("REFEREE", (20, 20, 20))}
 
 
 def run(*cmd):
@@ -106,6 +108,43 @@ def sfx_thud(d=0.25):
     return 0.8 * (np.sin(2 * np.pi * (90 - 120 * t) * t) + 0.3 * lowpass(rng.standard_normal(n), 6)) * np.exp(-t * 18)
 
 
+def sfx_splash(d=1.2):
+    n = int(d * SR); t = np.arange(n) / SR
+    x = lowpass(rng.standard_normal(n), 4) * np.exp(-t * 3.5) * np.minimum(1, t / 0.02)
+    bub = sum(np.sin(2 * np.pi * (400 + 300 * k) * t) * np.exp(-((t - 0.1 * k) * 30) ** 2) for k in range(1, 8)) * 0.3
+    return 0.7 * (x + bub)
+
+
+def sfx_sad_trombone(d=2.2):
+    n = int(d * SR); t = np.arange(n) / SR
+    notes = [(0.0, 294), (0.45, 277), (0.9, 262), (1.35, 247)]
+    out = np.zeros(n)
+    for st, f in notes:
+        ln = 0.85 if st == 1.35 else 0.42
+        m = (t >= st) & (t < st + ln)
+        tt = t[m] - st
+        vib = 1 + (0.02 * np.sin(2 * np.pi * 6 * tt) if st == 1.35 else 0)
+        ph = 2 * np.pi * f * vib * tt
+        out[m] += (np.sin(ph) + 0.5 * np.sin(2 * ph) + 0.3 * np.sin(3 * ph)) * np.minimum(1, (st + ln - t[m]) / 0.08)
+    return 0.25 * out
+
+
+def sfx_drum(d=0.3):
+    n = int(d * SR); t = np.arange(n) / SR
+    return 0.7 * (np.sin(2 * np.pi * 120 * t * (1 - t)) * np.exp(-t * 14) + 0.4 * rng.standard_normal(n) * np.exp(-t * 30))
+
+
+def sfx_wind(d=3.0):
+    n = int(d * SR)
+    x = lowpass(rng.standard_normal(n), 40)
+    return 1.2 * x * (0.6 + 0.4 * np.sin(np.linspace(0, 3 * np.pi, n))) * env(n, 0.5, 0.8)
+
+
+def sfx_ding(d=0.6):
+    n = int(d * SR); t = np.arange(n) / SR
+    return 0.35 * (np.sin(2 * np.pi * 1320 * t) + 0.5 * np.sin(2 * np.pi * 1980 * t)) * np.exp(-t * 6)
+
+
 def sfx_pop(d=0.15):
     n = int(d * SR); t = np.arange(n) / SR
     return 0.4 * np.sin(2 * np.pi * (600 + 2400 * t / d) * t) * np.exp(-t * 25)
@@ -120,7 +159,8 @@ def mix_audio(clips, ev, sfx, total):
         i = int(t * SR); a = clips[key]; voice[i:i + len(a)] += a[: n - i]
     for a, t in sfx:
         i = int(t * SR); fx[i:i + len(a)] += a[: n - i].astype(np.float32)
-    music = load_audio(MUSIC)
+    music = load_audio(CFG.get("music", MUSIC))
+    music = music / (np.sqrt(np.mean(music ** 2)) + 1e-9) * 0.12
     music = np.tile(music, int(np.ceil(n / len(music))))[:n]
     vol_env = lowpass((np.abs(voice) > 0.02).astype(np.float32), 8000)
     music *= 0.32 - 0.18 * np.clip(vol_env * 3, 0, 1)
@@ -289,6 +329,9 @@ def character(kind, mouth=0.0, blink=False, look=(0, 0), arms="down", dizzy=Fals
     elif mouth > 0.1:
         pen.ell(hx, my, hr * (0.22 + 0.1 * mouth), hr * (0.06 + 0.22 * mouth), (110, 20, 30), 5)
         pen.ell(hx, my + hr * 0.12 * mouth, hr * 0.14, hr * 0.07 * mouth + 1, (230, 90, 100), 0)
+    elif angry:
+        pts = [(hx + math.cos(a) * hr * 0.22, my + hr * 0.1 - math.sin(a) * hr * 0.1) for a in np.linspace(0.3, math.pi - 0.3, 10)]
+        pen.line(pts, OUT, 7)
     else:
         pts = [(hx + math.cos(a) * hr * 0.25, my - hr * 0.08 + math.sin(a) * hr * 0.14) for a in np.linspace(0.3, math.pi - 0.3, 10)]
         pen.line(pts, OUT, 7)
@@ -309,14 +352,19 @@ def character(kind, mouth=0.0, blink=False, look=(0, 0), arms="down", dizzy=Fals
     return img
 
 
-def coach(mouth=0.0, blink=False, look=(0, 0), t=0.0, arms="clipboard", angry=False):
-    """Coach Pancake: short, round, giant mustache, team cap, clipboard."""
+def coach(mouth=0.0, blink=False, look=(0, 0), t=0.0, arms="clipboard", angry=False, style="coach", soaked=False):
+    """Coach Pancake: short, round, giant mustache, team cap, clipboard. style="ref" draws the referee."""
+    ref = style == "ref"
+    if ref and arms == "clipboard":
+        arms = "down"
     img = Image.new("RGBA", (SPR_W * S, SPR_H * S), (0, 0, 0, 0))
     pen = Pen(img, AX, AY)
     bw, bh, hr, lh = 270, 250, 108, 95
-    skin = (240, 190, 150)
+    skin = (200, 140, 100) if ref else (240, 190, 150)
+    shirt = (245, 245, 245) if ref else (200, 200, 212)
+    cap = (25, 25, 30) if ref else PURPLE
     for sx in (-1, 1):
-        pen.limb([(sx * 55, -lh - 20), (sx * 55, -22)], (205, 185, 135), 52)
+        pen.limb([(sx * 55, -lh - 20), (sx * 55, -22)], (30, 30, 35) if ref else (205, 185, 135), 52)
         pen.ell(sx * 67, -16, 58, 20, (70, 45, 30))
     top = -lh - bh + 15
     sh = top + 50
@@ -326,14 +374,24 @@ def coach(mouth=0.0, blink=False, look=(0, 0), t=0.0, arms="clipboard", angry=Fa
         ah = [(-150, -lh - bh * 0.35), (25, top - hr * 0.6)]
     else:
         ah = [(-150, -lh - bh * 0.35 + 5 * math.sin(t * 3)), (60, -lh - bh * 0.5)]
+    if arms == "flag":
+        ah = [(-150, -lh - bh * 0.35), (150, top - 150)]
     for sx, hand in zip((-1, 1), ah):
         elbow = ((sx * 120 + hand[0]) / 2 + sx * 25, (sh + hand[1]) / 2 + 15)
-        pen.limb([(sx * 115, sh), elbow, hand], (200, 200, 212), 40)
-    pen.ell(0, -lh - bh / 2 + 10, bw / 2, bh / 2, (200, 200, 212))
+        pen.limb([(sx * 115, sh), elbow, hand], shirt, 40)
+    pen.ell(0, -lh - bh / 2 + 10, bw / 2, bh / 2, shirt)
+    if ref:
+        for i in (-2, -1, 0, 1, 2):
+            x = i * 50
+            half = math.sqrt(max(0, 1 - (x / (bw / 2)) ** 2)) * bh / 2 - 8
+            pen.line([(x, -lh - bh / 2 + 10 - half), (x, -lh - bh / 2 + 10 + half)], OUT, 22)
     pen.poly([(-45, top + 5), (0, top + 55), (45, top + 5)], (240, 240, 245), 5)
     pen.line([(-40, top + 20), (0, -lh - bh * 0.45), (40, top + 20)], (40, 40, 50), 4)
     pen.rect(-14, -lh - bh * 0.45, 22, -lh - bh * 0.45 + 22, (220, 220, 230), 4, 6)
-    pen.text(-60, -lh - bh * 0.6, "W", 40, PURPLE, 0)
+    if not ref:
+        pen.text(-60, -lh - bh * 0.6, "W", 40, PURPLE, 0)
+    if arms == "flag":
+        pen.rect(130, top - 230, 230, top - 160, (255, 220, 0), 5, 4)
     if arms == "clipboard":
         pen.rect(-10, -lh - bh * 0.75, 140, -lh - bh * 0.15, (150, 100, 60), 6, 8)
         pen.rect(5, -lh - bh * 0.7, 125, -lh - bh * 0.2, "white", 0, 4)
@@ -346,14 +404,16 @@ def coach(mouth=0.0, blink=False, look=(0, 0), t=0.0, arms="clipboard", angry=Fa
     pen.ell(0, hy, hr, hr * 0.97, skin)
     pen.ell(-hr * 0.98, hy + 10, 22, 30, skin)
     pen.ell(hr * 0.98, hy + 10, 22, 30, skin)
-    pen.ell(-hr * 1.02, hy + 5, 26, 34, (40, 40, 50), 4)  # headset cup
-    pen.line([(-hr * 1.02, hy + 30), (-hr * 0.5, hy + hr * 0.6)], (40, 40, 50), 7)
-    pen.ell(-hr * 0.45, hy + hr * 0.6, 10, 10, (40, 40, 50), 0)
+    if not ref:
+        pen.ell(-hr * 1.02, hy + 5, 26, 34, (40, 40, 50), 4)  # headset cup
+        pen.line([(-hr * 1.02, hy + 30), (-hr * 0.5, hy + hr * 0.6)], (40, 40, 50), 7)
+        pen.ell(-hr * 0.45, hy + hr * 0.6, 10, 10, (40, 40, 50), 0)
     # cap
     pen.d.chord([pen.p(-hr * 1.02, hy - hr * 1.05), pen.p(hr * 1.02, hy + hr * 0.45)], 180, 360,
-                fill=PURPLE, outline=OUT, width=6 * S)
-    pen.poly([(hr * 0.3, hy - hr * 0.33), (hr * 1.55, hy - hr * 0.25), (hr * 1.5, hy - hr * 0.1), (hr * 0.3, hy - hr * 0.2)], PURPLE, 6)
-    pen.text(0, hy - hr * 0.65, "W", 50, GOLD, 4)
+                fill=cap, outline=OUT, width=6 * S)
+    pen.poly([(hr * 0.3, hy - hr * 0.33), (hr * 1.55, hy - hr * 0.25), (hr * 1.5, hy - hr * 0.1), (hr * 0.3, hy - hr * 0.2)], cap, 6)
+    if not ref:
+        pen.text(0, hy - hr * 0.65, "W", 50, GOLD, 4)
     ex, ey = hr * 0.35, hy + hr * 0.02
     for sx in (-1, 1):
         cx = sx * ex
@@ -372,9 +432,17 @@ def coach(mouth=0.0, blink=False, look=(0, 0), t=0.0, arms="clipboard", angry=Fa
         pen.ell(0, my, 26 + 8 * mouth, 6 + 26 * mouth, (110, 20, 30), 5)
     else:
         pen.line([(-22, my), (22, my)], OUT, 6)
-    pen.ell(0, hy + hr * 0.3, 26, 22, (235, 150, 130), 5)  # nose
-    for sx in (-1, 1):  # mustache
-        pen.ell(sx * 42, hy + hr * 0.48 - mouth * 6, 52, 22, (235, 235, 240), 5)
+    pen.ell(0, hy + hr * 0.3, 26, 22, (235, 150, 130) if not ref else (180, 120, 85), 5)  # nose
+    if not ref:
+        for sx in (-1, 1):  # mustache
+            pen.ell(sx * 42, hy + hr * 0.48 - mouth * 6, 52, 22, (235, 235, 240), 5)
+    if soaked:
+        for i in range(7):
+            dx = -hr + i * hr / 3
+            dy = (t * 220 + i * 37) % 160
+            pen.ell(dx, hy - hr * 0.6 + dy, 9, 14, (255, 150, 40), 3)
+        pen.d.chord([pen.p(-hr * 1.05, hy - hr * 1.1), pen.p(hr * 1.05, hy + hr * 0.3)], 180, 360,
+                    fill=(255, 150, 40), outline=OUT, width=5 * S)
     return img
 
 
@@ -551,6 +619,7 @@ def init_worker(state, ep_name):
 def main(ep, final):
     CFG["lines"] = ep.LINES
     CFG["out_dir"] = os.path.join(HERE, "build", ep.NAME)
+    CFG["music"] = os.path.join(HERE, "music", getattr(ep, "MUSIC", MUSIC))
     os.makedirs(CFG["out_dir"], exist_ok=True)
     clips = make_voices()
     dur = {k: len(v) / SR for k, v in clips.items()}
@@ -559,7 +628,7 @@ def main(ep, final):
     wav = mix_audio(clips, ev, sfx, total)
     state = dict(ev=ev, T=T, dur=dur, mouth=mouth_envelopes(clips), evt={k: s for k, s in ev})
     nframes = int(total * FPS)
-    print(f"duration {total:.1f}s, {nframes} frames", flush=True)
+    print(f"duration {total:.1f}s, {nframes} frames", {k: round(v, 1) for k, v in T.items()}, flush=True)
     sys.path.insert(0, os.path.dirname(os.path.abspath(ep.__file__)))
     if os.environ.get("PREVIEW"):
         init_worker(state, ep.__name__)
@@ -577,3 +646,50 @@ def main(ep, final):
                 print(f"frame {i}/{nframes}", flush=True)
     ff.stdin.close(); ff.wait()
     print("done", final)
+
+
+class Timeline:
+    def __init__(self, dur):
+        self.dur, self.ev, self.sfx, self.T = dur, [], [], {}
+
+    def say(self, key, t):
+        self.ev.append((key, t)); return t + self.dur[key]
+
+    def fx(self, a, t):
+        self.sfx.append((a, t))
+
+    def result(self):
+        return self.ev, self.sfx, self.T
+
+
+def end_card(t, u, title, next_text, sprites, bg=PURPLE, rays=(110, 60, 165)):
+    """Shared end card: title, characters waving, 'next time' teaser."""
+    frame = Image.new("RGBA", (W * S, H * S), bg + (255,))
+    pen = Pen(frame)
+    for i in range(14):
+        a = i * math.pi / 7 + u * 0.4
+        pen.poly([(540, 1000), (540 + math.cos(a) * 1600, 1000 + math.sin(a) * 1600),
+                  (540 + math.cos(a + 0.22) * 1600, 1000 + math.sin(a + 0.22) * 1600)], rays, 0)
+    k = ease(u / 0.4)
+    Pen(frame, 540, 260, 0.3 + 0.7 * k).text(0, 0, "TANK & ZIPPY", 120, GOLD, 12)
+    Pen(frame, 540, 380, 0.3 + 0.7 * k).text(0, 0, title, 56, "white", 7)
+    for spr, x, y, sc in sprites:
+        place(frame, spr, x, y, sc=sc)
+    k2 = ease((u - 0.6) / 0.4)
+    if next_text:
+        Pen(frame, 540, 1580, 0.4 + 0.6 * k2).text(0, 0, "NEXT TIME:", 60, "white", 8)
+        Pen(frame, 540, 1680, 0.4 + 0.6 * k2).text(0, 0, next_text, 80, GOLD, 10)
+    Pen(frame, 540, 1810, 0.4 + 0.6 * k2).text(0, 0, "FOLLOW FOR MORE!", 56, "white", 7)
+    return frame
+
+
+def get_set(name, builder):
+    """Static backgrounds are built once per worker process and cached."""
+    sets = G.setdefault("sets", {})
+    if name not in sets:
+        sets[name] = builder()
+    return sets[name]
+
+
+def bg_copy(img):
+    return img.copy() if img.mode == "RGBA" else img.convert("RGBA")
