@@ -58,11 +58,11 @@ def eyes(ctx, st, pts, r, skin, lashes=False, seed=0.0):
         s = 1 if x > sum(p[0] for p in pts) / len(pts) else -1
         by = y - r * 1.45
         if mood == "angry":
-            ctx.move_to(x - s * r * 0.8, by - 10)
-            ctx.line_to(x + s * r * 0.6, by + 12)
+            ctx.move_to(x - s * r * 0.8, by + 12)
+            ctx.line_to(x + s * r * 0.6, by - 10)
         elif mood == "sad":
-            ctx.move_to(x - s * r * 0.8, by + 10)
-            ctx.line_to(x + s * r * 0.6, by - 8)
+            ctx.move_to(x - s * r * 0.8, by - 10)
+            ctx.line_to(x + s * r * 0.6, by + 8)
         elif mood == "shock":
             ctx.move_to(x - r * 0.7, by - 18)
             ctx.curve_to(x - r * 0.2, by - 30, x + r * 0.2, by - 30, x + r * 0.7, by - 18)

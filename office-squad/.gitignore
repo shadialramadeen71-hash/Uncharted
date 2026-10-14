@@ -1,0 +1,4 @@
+build/
+output/*.wav
+output/*.png
+__pycache__/

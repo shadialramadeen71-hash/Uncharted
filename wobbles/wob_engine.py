@@ -22,6 +22,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 FPS = 30
 DEFAULT_CAM = {"x": 1000.0, "y": -470.0, "z": 0.85}
 VERTICAL = False
+SHOW = {"title": "THE WOBBLES", "logo": "WOBBLES"}  # other series built on this engine override it
 
 
 def set_vertical(on=True):
@@ -596,7 +597,7 @@ def overlay(ctx, ep, fr):
     if fr["scene"] != "intro":
         ctx.save()
         ctx.translate(W - 150, 70)
-        text_center(ctx, "WOBBLES", 0, 0, 40, hexc("#ffffff", 0.75), outline=(hexc("#000000", 0.35), 6))
+        text_center(ctx, SHOW["logo"], 0, 0, 40, hexc("#ffffff", 0.75), outline=(hexc("#000000", 0.35), 6))
         ctx.restore()
     if fr["caption"]:
         who, text, u = fr["caption"]
@@ -637,7 +638,7 @@ def overlay(ctx, ep, fr):
         ctx.translate(W / 2, H / 2)
         s = max(0.02, ease(u * 4)) * k_text()
         ctx.scale(s, s)
-        text_center(ctx, "THE WOBBLES", 0, -40, 170, hexc("#ffd23f"), outline=(INK, 18))
+        text_center(ctx, SHOW["title"], 0, -40, 170, hexc("#ffd23f"), outline=(INK, 18))
         text_center(ctx, ep.end_card, 0, 90, 64, hexc("#ffffff"), font="Fredoka", outline=(INK, 8))
         ctx.restore()
 
