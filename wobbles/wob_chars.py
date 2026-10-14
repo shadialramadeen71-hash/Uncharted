@@ -194,6 +194,11 @@ class Toon(Humanoid):
             col(ctx, hexc("#ff3b3b"))
             ctx.fill()
             ctx.restore()
+        elif item in ("gnome", "card10", "wrench", "sandwich"):
+            ctx.save()
+            ctx.translate(*p)
+            draw_item(ctx, item)
+            ctx.restore()
         else:
             super().held_item(ctx, p, ang, f, st)
 
@@ -495,6 +500,11 @@ class Dog:
     """Biscuit, a very round beagle."""
     scale = 1.0
     default_style = "normal"
+    fur = hexc("#c98f4a")
+    fur_dark = hexc("#b07a3c")
+    belly = hexc("#f2e1c4")
+    ear = hexc("#7a4a24")
+    collar = hexc("#ffd23f")
 
     def head_top(self, st):
         return 230 + st.get("lift", 0)
@@ -504,55 +514,165 @@ class Dog:
 
     def draw(self, ctx, st):
         t, f, ph, w = st["t"], st["facing"], st["phase"], st["walkw"]
+        howl = st.get("howl", 0)
         ctx.save()
         ctx.translate(st["x"] + math.sin(t * 70) * 7 * st["shake"], -st["jump"] - st.get("lift", 0))
         ctx.scale(f, 1)
-        # legs
         for i, (lx, off) in enumerate(((-70, 0), (60, math.pi), (-50, math.pi), (80, 0))):
             a = 0.5 * w * math.sin(ph * 1.6 + off)
-            c = hexc("#b07a3c") if i < 2 else hexc("#c98f4a")
-            stroke_limb(ctx, [(lx, -70), (lx + math.sin(a) * 60, -10)], 26, c, 5)
-        # tail
+            stroke_limb(ctx, [(lx, -70), (lx + math.sin(a) * 60, -10)], 26,
+                        self.fur_dark if i < 2 else self.fur, 5)
         wag = math.sin(t * 16) * 0.5
         ctx.save()
         ctx.translate(-110, -120)
         ctx.rotate(-0.8 + wag)
-        stroke_limb(ctx, [(0, 0), (0, -60)], 16, hexc("#c98f4a"), 5)
+        self.draw_tail(ctx)
         ctx.restore()
         ellipse(ctx, 0, -110, 125, 70)
-        fill_ink(ctx, hexc("#c98f4a"), 6)
+        fill_ink(ctx, self.fur, 6)
         ellipse(ctx, -20, -130, 60, 34)
-        col(ctx, hexc("#f2e1c4"))
+        col(ctx, self.belly)
         ctx.fill()
-        # head
+        self.body_details(ctx, st)
         ctx.save()
-        ctx.translate(120, -170 - 4 * abs(math.sin(t * 8)) * st["talk"])
+        ctx.translate(120, -170 - 4 * abs(math.sin(t * 8)) * st["talk"] - 30 * howl)
+        ctx.rotate(-0.7 * howl)
         ellipse(ctx, 0, 0, 62, 56)
-        fill_ink(ctx, hexc("#c98f4a"), 6)
+        fill_ink(ctx, self.fur, 6)
         ellipse(ctx, 40, 22, 40, 28)
-        fill_ink(ctx, hexc("#f2e1c4"), 5)
+        fill_ink(ctx, self.belly, 5)
         ellipse(ctx, 74, 12, 14, 11)
         col(ctx, INK)
         ctx.fill()
         ctx.save()
         ctx.rotate(0.2 + 0.15 * math.sin(t * 5))
         ellipse(ctx, -40, 20, 22, 50)
-        fill_ink(ctx, hexc("#7a4a24"), 5)
+        fill_ink(ctx, self.ear, 5)
         ctx.restore()
+        self.draw_eye(ctx, st)
+        op = max(st["talk"], howl)
+        if op > 0.1:
+            ellipse(ctx, 52, 48, 18, 16 * op)
+            col(ctx, hexc("#5a1020"))
+            ctx.fill()
+        carry = st.get("carry")
+        if carry:
+            ctx.save()
+            ctx.translate(70, 58)
+            ctx.scale(f, 1)  # keep the carried thing upright
+            draw_item(ctx, carry)
+            ctx.restore()
+        self.head_details(ctx, st)
+        ctx.restore()
+        ctx.arc(80, -150, 10, 0, TAU)
+        fill_ink(ctx, self.collar, 3)
+        ctx.restore()
+
+    def draw_tail(self, ctx):
+        stroke_limb(ctx, [(0, 0), (0, -60)], 16, self.fur, 5)
+
+    def draw_eye(self, ctx, st):
         ctx.arc(14, -16, 14, 0, TAU)
         fill_ink(ctx, hexc("#ffffff"), 4)
         ctx.arc(18, -14, 6, 0, TAU)
         col(ctx, INK)
         ctx.fill()
-        if st["talk"] > 0.1:
-            ellipse(ctx, 52, 48, 18, 14 * st["talk"])
-            col(ctx, hexc("#ff7a8a"))
+
+    def body_details(self, ctx, st):
+        pass
+
+    def head_details(self, ctx, st):
+        pass
+
+
+class RoboDog(Dog):
+    """Robo-Biscuit: Max's chore robot. Fetches anything. Literally anything."""
+    fur = hexc("#b0bec5")
+    fur_dark = hexc("#90a4ae")
+    belly = hexc("#eceff1")
+    ear = hexc("#607d8b")
+    collar = hexc("#ff1744")
+
+    def draw_tail(self, ctx):
+        stroke_limb(ctx, [(0, 0), (0, -50)], 10, hexc("#78909c"), 4)
+        ctx.arc(0, -60, 12, 0, TAU)
+        fill_ink(ctx, hexc("#ff1744"), 3)
+
+    def draw_eye(self, ctx, st):
+        on = 0.6 + 0.4 * math.sin(st["t"] * 9)
+        g = cairo.RadialGradient(16, -16, 2, 16, -16, 34)
+        g.add_color_stop_rgba(0, 1, 0.1, 0.2, 0.7 * on)
+        g.add_color_stop_rgba(1, 1, 0.1, 0.2, 0)
+        ctx.set_source(g)
+        ctx.arc(16, -16, 34, 0, TAU)
+        ctx.fill()
+        rrect(ctx, 0, -26, 34, 20, 6)
+        fill_ink(ctx, hexc("#ff5252"), 4)
+
+    def body_details(self, ctx, st):
+        for x in (-80, -30, 20, 70):
+            ctx.arc(x, -150, 6, 0, TAU)
+            fill_ink(ctx, hexc("#78909c"), 2)
+        rrect(ctx, -60, -110, 80, 40, 8)
+        fill_ink(ctx, hexc("#37474f"), 3)
+        for k in range(3):
+            ctx.arc(-44 + k * 24, -90, 6, 0, TAU)
+            col(ctx, hexc(("#4caf50", "#ffeb3b", "#ff1744")[k]) if int(st["t"] * 4 + k) % 2 else hexc("#263238"))
             ctx.fill()
-        ctx.restore()
-        # collar
-        ctx.arc(80, -150, 10, 0, TAU)
-        fill_ink(ctx, hexc("#ffd23f"), 3)
-        ctx.restore()
+
+    def head_details(self, ctx, st):
+        ctx.move_to(-10, -54)
+        ctx.line_to(-20, -110)
+        ctx.set_line_width(5)
+        col(ctx, INK)
+        ctx.stroke()
+        ctx.arc(-20, -116, 10, 0, TAU)
+        fill_ink(ctx, hexc("#ff1744") if int(st["t"] * 3) % 2 else hexc("#ffeb3b"), 3)
 
 
-CAST = {"gary": Gary, "linda": Linda, "max": Max, "pip": Pip, "fuss": Fussbucket, "biscuit": Dog}
+def draw_item(ctx, item):
+    """Small props a character can hold or a dog can carry, drawn around (0, 0)."""
+    if item == "gnome":
+        rrect(ctx, -26, -40, 52, 50, 14)
+        fill_ink(ctx, hexc("#1e88e5"), 4)
+        ctx.arc(0, -52, 20, 0, TAU)
+        fill_ink(ctx, hexc("#f4c69a"), 4)
+        path_poly(ctx, [(-22, -60), (22, -60), (0, -118)])
+        fill_ink(ctx, hexc("#e53935"), 4)
+        path_poly(ctx, [(-18, -46), (18, -46), (0, -10)])
+        fill_ink(ctx, hexc("#ffffff"), 3)
+    elif item == "card10":
+        rrect(ctx, -60, -120, 120, 100, 10)
+        fill_ink(ctx, hexc("#ffffff"), 5)
+        ctx.select_font_face("Luckiest Guy")
+        ctx.set_font_size(70)
+        e = ctx.text_extents("10")
+        ctx.move_to(-e.width / 2 - e.x_bearing, -42)
+        col(ctx, hexc("#e53935"))
+        ctx.show_text("10")
+        stroke_limb(ctx, [(0, -20), (0, 10)], 8, hexc("#8d5a3b"), 3)
+    elif item == "sandwich":
+        path_poly(ctx, [(-40, 0), (40, 0), (0, -50)])
+        fill_ink(ctx, hexc("#f3d18a"), 4)
+        ctx.move_to(-30, -10)
+        ctx.line_to(30, -10)
+        ctx.set_line_width(6)
+        col(ctx, hexc("#7cb342"))
+        ctx.stroke()
+    elif item == "plank":
+        ctx.save()
+        ctx.rotate(-0.15)
+        path_poly(ctx, [(-90, -14), (60, -14), (90, 0), (60, 14), (-90, 14)])
+        fill_ink(ctx, hexc("#f5e6c8"), 4)
+        ctx.restore()
+    elif item == "wrench":
+        stroke_limb(ctx, [(0, 0), (0, -80)], 12, hexc("#9e9e9e"), 4)
+        ctx.arc(0, -92, 18, 0, TAU)
+        fill_ink(ctx, hexc("#9e9e9e"), 4)
+        ctx.rectangle(-6, -112, 12, 22)
+        col(ctx, hexc("#ffffff"))
+        ctx.fill()
+
+
+CAST = {"gary": Gary, "linda": Linda, "max": Max, "pip": Pip, "fuss": Fussbucket, "biscuit": Dog,
+        "robo": RoboDog}

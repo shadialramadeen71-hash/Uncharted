@@ -9,8 +9,15 @@
 - **Biscuit** — a very round beagle.
 - **Mr. Fussbucket** — next door; loves his lawn more than people.
 
-Episode 1: *The Great Barbecue Disaster* (~1:50) — flying-couch opening gag, kitchen,
-backyard barbecue, turbo grill, burger rain, self-destruct.
+| Ep | Title | Story |
+|----|-------|-------|
+| 1 | The Great Barbecue Disaster | flying couch, turbo grill, burger rain, self-destruct |
+| 2 | The Talent Show | Pip and a howling Biscuit; Mr. Fussbucket judges |
+| 3 | Robo-Biscuit | Max's robot dog fetches everything — including the fence |
+
+Add `--vertical` to render 1080x1920 shorts with a speaker-following camera:
+
+    python3 render.py --vertical      # -> output/the_wobbles_epN_short.mp4
 
 ## Render
 

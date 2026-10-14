@@ -318,12 +318,16 @@ class Backyard(Scene):
         ctx.save()
         apply_cam(ctx, cam)
         a, b = vis(cam)
-        ctx.rectangle(1300, -330, max(0, b - 1300), 40)
-        col(ctx, hexc("#e8d5b0"))
-        ctx.fill()
+        gone = v.get("fence_gone", 0)
+        if not gone:
+            ctx.rectangle(1300, -330, max(0, b - 1300), 40)
+            col(ctx, hexc("#e8d5b0"))
+            ctx.fill()
         for k in range(int(1300 // 70), int(b // 70) + 2):
             x = k * 70
-            path_poly(ctx, [(x - 28, -40), (x - 28, -420), (x, -460), (x + 28, -420), (x + 28, -40)])
+            top = -110 - 30 * ((k * 7) % 3) if gone else -420
+            path_poly(ctx, [(x - 28, -40), (x - 28, top), (x, top - (0 if gone else 40)), (x + 28, top),
+                            (x + 28, -40)])
             fill_ink(ctx, hexc("#f5e6c8"), 5)
         # picnic table
         rrect(ctx, 1600, -260, 360, 36, 8)
@@ -459,4 +463,112 @@ class Sky(Scene):
         ctx.restore()
 
 
-SCENES = {"intro": Intro, "living": LivingRoom, "kitchen": Kitchen, "backyard": Backyard, "sky": Sky}
+class Stage(Scene):
+    """Pickleton Talent Show: curtains, spotlight, judge's table, audience."""
+
+    def draw_bg(self, ctx, cam, t, v):
+        sky(ctx, hexc("#1a1033"), hexc("#3a1f5c"))
+        ctx.save()
+        apply_cam(ctx, cam)
+        a, b = vis(cam)
+        ctx.rectangle(a, -2400, b - a, 2400)
+        col(ctx, hexc("#2b1a4a"))
+        ctx.fill()
+        rnd = random.Random(4)
+        for _ in range(60):
+            x, y = rnd.uniform(200, 1800), rnd.uniform(-1500, -500)
+            r = 4 + 3 * math.sin(t * 3 + x)
+            ctx.arc(x, y, max(1, r), 0, TAU)
+            col(ctx, hexc("#ffe082", 0.8))
+            ctx.fill()
+        rrect(ctx, 610, -1150, 780, 200, 30)
+        fill_ink(ctx, hexc("#ffd23f"), 8)
+        text_center(ctx, "PICKLETON", 1000, -1078, 56, hexc("#5a4ea8"))
+        text_center(ctx, "TALENT SHOW", 1000, -990, 92, hexc("#e53935"), outline=(INK, 8))
+        # stage floor
+        ctx.rectangle(a, -60, b - a, 70)
+        col(ctx, hexc("#a1663f"))
+        ctx.fill()
+        ctx.rectangle(a, 10, b - a, 160)
+        col(ctx, hexc("#5d3a22"))
+        ctx.fill()
+        ctx.rectangle(a, 170, b - a, 1400)
+        col(ctx, hexc("#140b26"))
+        ctx.fill()
+        ctx.restore()
+
+    def draw_fg(self, ctx, cam, t, v):
+        """Curtains hide performers standing at z < 0 until they open."""
+        ctx.save()
+        apply_cam(ctx, cam)
+        op = v.get("curtain", 1.0)
+        for side in (-1, 1):
+            edge = 1000 + side * (60 + op * 820)
+            outer = 1000 + side * 1500
+            x0, x1 = min(edge, outer), max(edge, outer)
+            ctx.rectangle(x0, -1250, x1 - x0, 1200)
+            g = cairo.LinearGradient(x0, 0, x1, 0)
+            for k in range(9):
+                g.add_color_stop_rgb(k / 8, 0.75 if k % 2 else 0.55, 0.08, 0.12)
+            ctx.set_source(g)
+            ctx.fill_preserve()
+            col(ctx, INK)
+            ctx.set_line_width(8)
+            ctx.stroke()
+        ctx.rectangle(-600, -1300, 3200, 90)
+        fill_ink(ctx, hexc("#8e1b2e"), 8)
+        ctx.restore()
+
+    def draw_top(self, ctx, cam, t, v):
+        ctx.save()
+        apply_cam(ctx, cam)
+        sx = v.get("spot_x")
+        if sx is not None and v.get("spot", 0) > 0:
+            path_poly(ctx, [(sx - 60, -1300), (sx + 60, -1300), (sx + 330, 0), (sx - 330, 0)])
+            col(ctx, hexc("#fff8c4", 0.22 * v["spot"]))
+            ctx.fill()
+            ellipse(ctx, sx, -10, 330, 50)
+            col(ctx, hexc("#fff8c4", 0.3 * v["spot"]))
+            ctx.fill()
+        # judge's table (covers the judge's legs)
+        rrect(ctx, 1500, -300, 420, 300, 12)
+        fill_ink(ctx, hexc("#3949ab"), 8)
+        text_center(ctx, "JUDGE", 1710, -130, 70, hexc("#ffd23f"), outline=(INK, 6))
+        # confetti
+        c0 = v.get("confetti_t0")
+        if c0:
+            u = t - c0
+            rnd = random.Random(8)
+            for i in range(90):
+                x = rnd.uniform(0, 2000) + 60 * math.sin(u * 3 + i)
+                y = -1400 + (u * rnd.uniform(300, 600) + rnd.uniform(-600, 0))
+                if y > 20:
+                    continue
+                ctx.save()
+                ctx.translate(x, y)
+                ctx.rotate(u * 5 + i)
+                ctx.rectangle(-10, -5, 20, 10)
+                col(ctx, hexc(("#ffd23f", "#ff6fae", "#7cf5ff", "#9be15d", "#ff7043")[i % 5]))
+                ctx.fill()
+                ctx.restore()
+        # audience heads
+        cheer = v.get("cheer", 0.0)
+        a, b = vis(cam)
+        for row, (y, r, shade_) in enumerate(((330, 70, "#24163d"), (460, 80, "#1a1030"))):
+            for k in range(int(a // 160) - 1, int(b // 160) + 2):
+                x = k * 160 + row * 80
+                jump = cheer * 30 * abs(math.sin(t * 9 + k * 1.7 + row))
+                ctx.arc(x, y - jump, r, 0, TAU)
+                col(ctx, hexc(shade_))
+                ctx.fill()
+                if cheer > 0.3:
+                    for s in (-1, 1):
+                        ctx.move_to(x + s * 50, y - jump + 20)
+                        ctx.line_to(x + s * 80, y - jump - 110 - 20 * math.sin(t * 12 + k))
+                        ctx.set_line_width(26)
+                        col(ctx, hexc(shade_))
+                        ctx.stroke()
+        ctx.restore()
+
+
+SCENES = {"stage": Stage, "intro": Intro, "living": LivingRoom, "kitchen": Kitchen, "backyard": Backyard, "sky": Sky}

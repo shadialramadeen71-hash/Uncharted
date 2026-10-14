@@ -44,6 +44,8 @@ audio.VOICES.update({
     "linda": dict(voice="en-US-MichelleNeural", rate="+2%", pitch="-4Hz", af="volume=1.15"),
     "max": dict(voice="en-US-AndrewNeural", rate="+10%", pitch="+38Hz", af="volume=1.2"),
     "pip": dict(voice="en-US-AnaNeural", rate="+8%", pitch="+12Hz", af="volume=1.2"),
+    "robo": dict(voice="en-US-EricNeural", rate="-12%", pitch="-18Hz",
+                 af="flanger=delay=3:depth=3:speed=8,aecho=0.8:0.6:12:0.4,volume=1.4"),
     "fuss": dict(voice="en-GB-RyanNeural", rate="-6%", pitch="-14Hz",
                  af="vibrato=f=5:d=0.08,highpass=f=160,volume=1.3"),
 })
@@ -97,7 +99,73 @@ def sfx_fanfare():
     return np.concatenate(out)
 
 
-for _fn in (sfx_sizzle, sfx_rocket, sfx_bark, sfx_beep, sfx_thud, sfx_fanfare):
+def sfx_applause():
+    rng = np.random.default_rng(12)
+    n = int(3.0 * audio.SR)
+    out = np.zeros(n)
+    clap = rng.standard_normal(int(0.012 * audio.SR)) * np.exp(-np.arange(int(0.012 * audio.SR)) / 90)
+    for _ in range(900):
+        i = int(rng.uniform(0, n - len(clap)))
+        out[i:i + len(clap)] += clap * rng.uniform(0.2, 0.6)
+    return out * audio._env(n, 0.2, 0.8) * 0.5
+
+
+def sfx_cheer():
+    rng = np.random.default_rng(13)
+    t = audio._t(3.0)
+    crowd = np.zeros(len(t))
+    for _ in range(14):
+        f0 = rng.uniform(250, 700)
+        f = f0 * (1 + 0.15 * np.sin(2 * np.pi * rng.uniform(2, 5) * t + rng.uniform(0, 6)))
+        crowd += np.sin(2 * np.pi * np.cumsum(f) / audio.SR) * rng.uniform(0.3, 1.0)
+    crowd = crowd / 14 + 0.3 * np.convolve(rng.standard_normal(len(t)), np.ones(20) / 20, mode="same")
+    return (crowd * 0.5 + sfx_applause()) * audio._env(len(t), 0.15, 0.9) * 0.8
+
+
+def sfx_howl():
+    t = audio._t(1.8)
+    f = 380 + 260 * np.sin(np.pi * t / 1.8) ** 0.6
+    f = f * (1 + 0.025 * np.sin(2 * np.pi * 6 * t))
+    ph = 2 * np.pi * np.cumsum(f) / audio.SR
+    s = np.sin(ph) + 0.35 * np.sin(2 * ph) + 0.15 * np.sin(3 * ph)
+    return s * audio._env(len(t), 0.12, 0.4) * 0.35
+
+
+def sfx_rip():
+    rng = np.random.default_rng(14)
+    t = audio._t(0.45)
+    n = rng.standard_normal(len(t)) * (rng.random(len(t)) > 0.6)
+    return n * np.linspace(0.3, 1.0, len(t)) * audio._env(len(t), 0.01, 0.08) * 0.7
+
+
+def sfx_crickets():
+    out = np.zeros(int(2.4 * audio.SR))
+    for k in range(6):
+        t = audio._t(0.12)
+        chirp = np.sin(2 * np.pi * 4300 * t) * (0.5 + 0.5 * np.sign(np.sin(2 * np.pi * 60 * t)))
+        i = int((0.1 + k * 0.38) * audio.SR)
+        out[i:i + len(chirp)] += chirp * audio._env(len(t), 0.01, 0.03) * 0.18
+    return out
+
+
+def sfx_crash():
+    rng = np.random.default_rng(15)
+    t = audio._t(1.2)
+    n = np.convolve(rng.standard_normal(len(t)), np.ones(3) / 3, mode="same")
+    clang = sum(np.sin(2 * np.pi * f * t) * rng.uniform(0.2, 0.5) for f in (523, 811, 1187, 1663))
+    return (n * 0.7 + clang * 0.4) * np.exp(-t * 4) * 0.8
+
+
+def sfx_robot():
+    out = []
+    for f in (880, 1320, 660):
+        s = audio._sweep(f, f, 0.09, "square")
+        out += [s * audio._env(len(s), 0.003, 0.02) * 0.25, np.zeros(int(0.03 * audio.SR))]
+    return np.concatenate(out)
+
+
+for _fn in (sfx_sizzle, sfx_rocket, sfx_bark, sfx_beep, sfx_thud, sfx_fanfare, sfx_applause, sfx_cheer,
+            sfx_howl, sfx_rip, sfx_crickets, sfx_crash, sfx_robot):
     audio.SFX[_fn.__name__[4:]] = _fn
 
 
@@ -107,7 +175,7 @@ def ease(u):
 
 
 NAMES = {"gary": ("GARY", "#3d8b3d"), "linda": ("LINDA", "#8e44ad"), "max": ("MAX", "#ff8f1f"),
-         "pip": ("PIP", "#ff6fae"), "fuss": ("MR. FUSSBUCKET", "#7a8b3a"), "biscuit": ("BISCUIT", "#b07a3c"),
+         "pip": ("PIP", "#ff6fae"), "fuss": ("MR. FUSSBUCKET", "#7a8b3a"), "robo": ("ROBO-BISCUIT", "#607d8b"), "biscuit": ("BISCUIT", "#b07a3c"),
          "narrator": ("", "#000000")}
 
 
