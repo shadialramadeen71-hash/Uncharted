@@ -474,7 +474,7 @@ class Squad(Humanoid):
         limb(ctx, [sh, e, w], [50, 42, 34], [sl, fa])
         self.arm_details(ctx, st, side, [sh, e, w])
         item = st.get("item")
-        if item and side == self.item_side:
+        if item and side == self.item_arm(st):
             ctx.save()
             ctx.translate(*w)
             draw_item(ctx, item, st["facing"])
@@ -484,6 +484,10 @@ class Squad(Humanoid):
 
     def arm_details(self, ctx, st, side, pts):
         pass
+
+    def item_arm(self, st):
+        """Which hand holds the item: the pointing hand when pointing, else the right one."""
+        return st["facing"] if st["arms"] == "point" else self.item_side
 
     def draw_torso(self, ctx, st, hip, top):
         rrect(ctx, -self.torso_w / 2, top, self.torso_w, self.torso + 24, 34)

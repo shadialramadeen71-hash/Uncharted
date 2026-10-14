@@ -28,6 +28,8 @@ def install_fonts():
 def main():
     install_fonts()
     import wob_engine
+    import wob_chars_hd  # the improved art: real hands, legs and shoes
+    wob_engine.CAST.update(wob_chars_hd.CAST)
     from wob_episodes import EPISODES
 
     args = sys.argv[1:]
