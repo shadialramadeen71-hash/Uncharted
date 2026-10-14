@@ -140,7 +140,7 @@ class Intro(Scene):
         ctx.save()
         ctx.translate(W / 2, H / 2 - 40)
         ctx.rotate(-0.05)
-        ctx.scale(s, s)
+        ctx.scale(s * min(1.0, W / 1500), s * min(1.0, W / 1500))
         text_center(ctx, "THE", 0, -150, 110, hexc("#ffffff"), outline=(INK, 14))
         text_center(ctx, "WOBBLES", 0, 60, 280, hexc("#ffd23f"), outline=(INK, 22))
         if u > 1.0:
@@ -454,6 +454,7 @@ class Sky(Scene):
         ctx.rotate(0.3 * math.sin(st * 4))
         sc = max(0.05, 1.0 - st * 0.25)
         ctx.scale(sc, sc)
+        ctx.translate(-Backyard.GX, 0)
         Backyard.grill(Backyard(), ctx, st, {"grill_y": 300, "beep": 1, "burgers_on": 0})
         ctx.restore()
 

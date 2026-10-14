@@ -140,6 +140,7 @@ def ep1():
 
     # KA-BLAMMO
     t = e.cursor
+    e.focus(1250, at=t)
     e.sfx("boom", at=t)
     e.sfx("rocket", at=t, gain=0.5)
     e.var("flash", 1.0, at=t)
@@ -195,6 +196,7 @@ def ep1():
         e.walk(n, -900, style="run", at=t + 0.3)
     e.tween("fuss", "lift", -420.0, 0.4, at=t + 0.3)
     e.fx_text("RUN!", 960, 260, dur=1.0, at=t + 0.2, color="#ff5252")
+    e.focus(1000, at=t + 0.8)
     e.wait(1.6)
     e.sfx("rocket")
     e.var("grill_y", 1600.0, dur=1.6)
@@ -223,6 +225,7 @@ def ep1():
     e.var("grill_gone", 1)
     e.place("gary", -300, facing=1, mood="sad", item="spatula")
     e.place("fuss", 1530, facing=-1, lift=0.0, mood="happy")
+    e.focus(1075)
     e.walk("gary", 620, style="sneak", wait=True)
     e.wait(0.3)
     e.say("fuss", "Same time next week, Wobble?")

@@ -31,6 +31,10 @@ def main():
     from wob_episodes import EPISODES
 
     args = sys.argv[1:]
+    vertical = "--vertical" in args
+    args = [a for a in args if a != "--vertical"]
+    if vertical:
+        wob_engine.set_vertical(True)
     preview = None
     if "--preview" in args:
         i = args.index("--preview")
@@ -39,7 +43,7 @@ def main():
     for n in [int(a) for a in args] or sorted(EPISODES):
         t0 = time.time()
         ep = EPISODES[n]().build()
-        out = os.path.join(HERE, "output", f"the_wobbles_ep{n}.mp4")
+        out = os.path.join(HERE, "output", f"the_wobbles_ep{n}{'_short' if vertical else ''}.mp4")
         print(f"Episode {n}: {ep.title} ({ep.total:.1f}s, {len(ep.frames)} frames)", flush=True)
         wob_engine.render(ep, out, preview=preview)
         print(f"  done in {time.time() - t0:.0f}s -> {out}", flush=True)

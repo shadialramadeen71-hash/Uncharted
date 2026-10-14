@@ -15,11 +15,27 @@ import numpy as np  # noqa: E402
 import audio  # noqa: E402
 from characters import WALK_STYLES
 from wob_chars import CAST, INK, TAU, col, ellipse, fill_ink, hexc, path_poly, rrect
-from wob_world import SCENES, H, W, apply_cam, text_center
+import wob_world  # noqa: E402
+from wob_world import SCENES, H, W, apply_cam, text_center  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FPS = 30
 DEFAULT_CAM = {"x": 1000.0, "y": -470.0, "z": 0.85}
+VERTICAL = False
+
+
+def set_vertical(on=True):
+    """Switch to 1080x1920 shorts: speaker-following camera, scaled titles/captions."""
+    global W, H, VERTICAL
+    VERTICAL = on
+    W, H = (1080, 1920) if on else (1920, 1080)
+    wob_world.W, wob_world.H = W, H
+    DEFAULT_CAM.update({"y": -400.0, "z": 0.95} if on else {"y": -470.0, "z": 0.85})
+
+
+def k_text():
+    """Shrink factor for big titles on narrow screens."""
+    return min(1.0, W / 1500)
 audio.CACHE = os.path.join(HERE, "build", "voice_cache")
 
 # ---- voices for the family -------------------------------------------------
@@ -103,6 +119,7 @@ class Episode:
         self.cmds, self.lines, self.sfx_events = [], [], []
         self.cam_keys, self.var_keys, self.fx_texts = [], [], []
         self.scene_keys = []   # (t, scene)
+        self.focus_keys = []   # (t, x) camera hints for vertical shorts
         self.music_keys = []   # (t, path, start)
         self.vars0 = {"ep_title": title}
         self.end_card = "SEE YOU NEXT TIME!"
@@ -188,6 +205,10 @@ class Episode:
     def cam(self, dur=0.8, at=None, **kw):
         self.cam_keys.append((self._at(at), dur, kw))
 
+    def focus(self, x, at=None):
+        """Where a vertical (shorts) camera should look when nobody is talking."""
+        self.focus_keys.append((self._at(at), x))
+
     def var(self, name, value, at=None, dur=0.0):
         self.var_keys.append((self._at(at), dur, name, value))
 
@@ -218,6 +239,7 @@ class Episode:
         var_keys = sorted(self.var_keys, key=lambda k: k[0])
         vars_, var_from = dict(self.vars0), {}
         active, steps, frames, ci = None, [], [], 0
+        auto_x, follow, last_scene = None, None, None
         scenes = sorted(self.scene_keys)
         for fi in range(nfr):
             t = fi * dt
@@ -319,6 +341,22 @@ class Episode:
             for s0, nm in scenes:
                 if s0 <= t + 1e-9:
                     scene = nm
+            if VERTICAL:
+                for t0, who, _, _ in self.lines:
+                    if t - 1e-9 <= t0 < t + dt - 1e-9:
+                        follow = who
+                for ft, fx in self.focus_keys:
+                    if t - 1e-9 <= ft < t + dt - 1e-9:
+                        follow = fx
+                if scene != last_scene:
+                    follow = cam["x"] if follow is None or isinstance(follow, str) else follow
+                    auto_x = None
+                goal = st[follow]["x"] if isinstance(follow, str) else (follow if follow is not None else cam["x"])
+                if auto_x is None:
+                    auto_x = goal
+                auto_x += (goal - auto_x) * min(1.0, dt * 3.0)
+                cam["x"] = auto_x
+                last_scene = scene
             if "fuss" in st:
                 vars_["fuss_head"] = self.actors["fuss"]["char"].head_top(st["fuss"])
             caption = None
@@ -472,9 +510,9 @@ def render_frame(fi):
         if f0 <= t <= f0 + d:
             u = t - f0
             ctx.save()
-            ctx.translate(x, y)
+            ctx.translate(x * W / 1920, y * H / 1080)
             ctx.rotate(rot)
-            sc = max(0.02, min(1.0, u * 8)) * (1 + 0.05 * math.sin(u * 20))
+            sc = max(0.02, min(1.0, u * 8)) * (1 + 0.05 * math.sin(u * 20)) * k_text()
             ctx.scale(sc, sc)
             text_center(ctx, text, 0, 0, size, c, outline=(INK, 16))
             ctx.restore()
@@ -489,35 +527,37 @@ def overlay(ctx, ep, fr):
     t = fr["t"]
     if fr["scene"] != "intro":
         ctx.save()
-        ctx.translate(1770, 70)
+        ctx.translate(W - 150, 70)
         text_center(ctx, "WOBBLES", 0, 0, 40, hexc("#ffffff", 0.75), outline=(hexc("#000000", 0.35), 6))
         ctx.restore()
     if fr["caption"]:
         who, text, u = fr["caption"]
         ctx.select_font_face("Fredoka", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        ctx.set_font_size(46)
-        lines = _wrap(ctx, text, 1400)
+        fs = 54 if VERTICAL else 46
+        margin = 50 if VERTICAL else 240
+        ctx.set_font_size(fs)
+        lines = _wrap(ctx, text, W - 2 * margin - 80)
         name, c = NAMES.get(who, (who.upper(), "#000000"))
-        lh = 56
+        lh = fs + 12
         bh = 30 + lh * len(lines)
-        y0 = H - 40 - bh
-        rrect(ctx, 240, y0, 1440, bh, 24)
+        y0 = 1600 - bh / 2 if VERTICAL else H - 40 - bh
+        rrect(ctx, margin, y0, W - 2 * margin, bh, 24)
         col(ctx, (0.05, 0.04, 0.08, 0.72))
         ctx.fill()
         if name:
             ctx.select_font_face("Luckiest Guy")
             ctx.set_font_size(34)
             e = ctx.text_extents(name)
-            rrect(ctx, 270, y0 - 30, e.x_advance + 40, 48, 24)
+            rrect(ctx, margin + 30, y0 - 30, e.x_advance + 40, 48, 24)
             fill_ink(ctx, hexc(c), 4)
-            ctx.move_to(290, y0 + 5)
+            ctx.move_to(margin + 50, y0 + 5)
             col(ctx, hexc("#ffffff"))
             ctx.show_text(name)
         ctx.select_font_face("Fredoka", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        ctx.set_font_size(46)
+        ctx.set_font_size(fs)
         for i, line in enumerate(lines):
             e = ctx.text_extents(line)
-            ctx.move_to(W / 2 - e.x_advance / 2, y0 + 58 + i * lh - 6)
+            ctx.move_to(W / 2 - e.x_advance / 2, y0 + 12 + fs + i * lh - 6)
             col(ctx, hexc("#ffffff"))
             ctx.show_text(line)
     end0 = ep.total - 3.0
@@ -527,7 +567,7 @@ def overlay(ctx, ep, fr):
         ctx.paint()
         ctx.save()
         ctx.translate(W / 2, H / 2)
-        s = max(0.02, ease(u * 4))
+        s = max(0.02, ease(u * 4)) * k_text()
         ctx.scale(s, s)
         text_center(ctx, "THE WOBBLES", 0, -40, 170, hexc("#ffd23f"), outline=(INK, 18))
         text_center(ctx, ep.end_card, 0, 90, 64, hexc("#ffffff"), font="Fredoka", outline=(INK, 8))
