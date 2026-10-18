@@ -1,0 +1,362 @@
+"""Audio: neural English TTS (edge-tts) with word timings, synthesized footsteps/SFX,
+and procedurally composed background music (original, so it is copyright-free)."""
+import asyncio
+import hashlib
+import json
+import os
+import ssl
+import subprocess
+
+import numpy as np
+from scipy import signal
+
+SR = 44100
+CACHE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "tts")
+
+
+# ------------------------------------------------------------------ TTS
+def _ssl_ctx():
+    for f in (os.environ.get("SSL_CERT_FILE"), "/root/.ccr/ca-bundle.crt"):
+        if f and os.path.exists(f):
+            return ssl.create_default_context(cafile=f)
+    return None
+
+
+async def _tts_stream(text, voice, rate, pitch):
+    import edge_tts
+    import edge_tts.communicate as comm
+
+    ctx = _ssl_ctx()
+    if ctx is not None:
+        comm._SSL_CTX = ctx
+    c = edge_tts.Communicate(text, voice, rate=rate, pitch=pitch, boundary="WordBoundary",
+                             proxy=os.environ.get("HTTPS_PROXY") or None)
+    audio, words = bytearray(), []
+    async for chunk in c.stream():
+        if chunk["type"] == "audio":
+            audio.extend(chunk["data"])
+        elif chunk["type"] == "WordBoundary":
+            s = chunk["offset"] / 1e7
+            words.append([s, s + chunk["duration"] / 1e7, chunk["text"]])
+    return bytes(audio), words
+
+
+def decode(path):
+    raw = subprocess.run(["ffmpeg", "-v", "error", "-i", path, "-f", "f32le", "-ac", "1", "-ar", str(SR), "-"],
+                         check=True, capture_output=True).stdout
+    return np.frombuffer(raw, dtype=np.float32).copy()
+
+
+def tts(text, voice, rate="+0%", pitch="+0Hz"):
+    """Returns (mono float32 audio, [(start, end, word)]) with leading/trailing silence trimmed."""
+    os.makedirs(CACHE, exist_ok=True)
+    key = hashlib.sha1(f"{voice}|{rate}|{pitch}|{text}".encode()).hexdigest()[:16]
+    mp3, js = os.path.join(CACHE, key + ".mp3"), os.path.join(CACHE, key + ".json")
+    if not (os.path.exists(mp3) and os.path.exists(js)):
+        last = None
+        for attempt in range(6):
+            try:
+                audio, words = asyncio.run(_tts_stream(text, voice, rate, pitch))
+                if len(audio) > 1000:
+                    open(mp3, "wb").write(audio)
+                    json.dump(words, open(js, "w"))
+                    break
+            except Exception as e:  # network hiccups: retry
+                last = e
+        else:
+            raise RuntimeError(f"TTS failed for {text!r}: {last}")
+    y = decode(mp3)
+    words = json.load(open(js))
+    env = np.abs(y)
+    idx = np.where(env > 0.01)[0]
+    a = max(0, idx[0] - int(0.02 * SR)) if len(idx) else 0
+    b = min(len(y), idx[-1] + int(0.06 * SR)) if len(idx) else len(y)
+    y = y[a:b]
+    off = a / SR
+    words = [(max(0.0, s - off), max(0.0, e - off), w) for s, e, w in words]
+    return y, words
+
+
+def voice_fx(y, fx):
+    if not fx:
+        return y
+    if fx == "nasal":  # pinched-nose voice
+        b, a = signal.butter(2, [700 / (SR / 2), 2600 / (SR / 2)], "band")
+        z = signal.lfilter(b, a, y) * 2.2
+        return (0.8 * z + 0.2 * y).astype(np.float32)
+    if fx == "shout":
+        return np.tanh(y * 2.2).astype(np.float32) * 0.8
+    if fx == "gargle":  # talking with the head tilted back
+        t = np.arange(len(y)) / SR
+        return (y * (0.65 + 0.35 * np.sin(2 * np.pi * 23 * t))).astype(np.float32)
+    return y
+
+
+def mouth_curve(y, fps):
+    """Per-video-frame mouth openness (0..1) and a 'width' cue from the voice."""
+    hop = SR // fps
+    n = len(y) // hop + 1
+    rms = np.zeros(n)
+    zcr = np.zeros(n)
+    for i in range(n):
+        seg = y[i * hop:(i + 1) * hop]
+        if len(seg):
+            rms[i] = np.sqrt(np.mean(seg ** 2))
+            zcr[i] = np.mean(np.abs(np.diff(np.sign(seg)))) / 2 if len(seg) > 1 else 0
+    m = np.clip(rms / (np.percentile(rms, 90) + 1e-6), 0, 1.15) ** 0.8
+    w = np.clip((zcr - 0.05) * 6, 0, 1)
+    return np.clip(m, 0, 1), w
+
+
+# ------------------------------------------------------------------ helpers
+def _t(d):
+    return np.arange(int(d * SR)) / SR
+
+
+def _noise(n, rng):
+    return rng.standard_normal(n).astype(np.float32)
+
+
+def _bp(x, lo, hi, order=2):
+    b, a = signal.butter(order, [lo / (SR / 2), min(hi, SR / 2 - 100) / (SR / 2)], "band")
+    return signal.lfilter(b, a, x)
+
+
+def _lp(x, f, order=2):
+    b, a = signal.butter(order, f / (SR / 2), "low")
+    return signal.lfilter(b, a, x)
+
+
+def _hp(x, f, order=2):
+    b, a = signal.butter(order, f / (SR / 2), "high")
+    return signal.lfilter(b, a, x)
+
+
+def room_reverb(x, wet=0.12, decay=0.35, seed=7):
+    rng = np.random.default_rng(seed)
+    n = int(decay * SR)
+    ir = _noise(n, rng) * np.exp(-np.arange(n) / (SR * decay / 6.5))
+    ir = _lp(ir, 5000)
+    ir /= np.sqrt(np.sum(ir ** 2)) + 1e-9
+    w = signal.fftconvolve(x, ir)[:len(x)]
+    return x + wet * w
+
+
+# ------------------------------------------------------------------ footsteps
+def footstep(rng, kind="sneaker", strength=1.0, speed=300.0):
+    """Heel strike + toe roll on a wooden floor, randomised so no two steps are identical."""
+    d = 0.32
+    t = _t(d)
+    n = len(t)
+    out = np.zeros(n, dtype=np.float32)
+    v = rng.uniform(0.85, 1.15) * strength * (0.8 + 0.4 * min(speed / 500, 1))
+    # heel: low thump with a pitch drop (floor resonance)
+    f0 = rng.uniform(70, 95)
+    ph = 2 * np.pi * np.cumsum(f0 * (1 + 1.2 * np.exp(-t * 60))) / SR
+    thump = np.sin(ph) * np.exp(-t * rng.uniform(32, 42))
+    # heel: contact noise
+    nz = _noise(n, rng)
+    if kind == "heel":  # harder sole, brighter click
+        click = _bp(nz, 1800, 7000) * np.exp(-t * 140) * 1.4
+        scuff_band = (1500, 6000)
+    else:
+        click = _bp(nz, 350, 2600) * np.exp(-t * 90)
+        scuff_band = (900, 4500)
+    out += (0.75 * thump + 0.55 * click) * v
+    # toe roll ~60-80 ms later, softer
+    dt = int(rng.uniform(0.055, 0.085) * SR)
+    toe = (_bp(_noise(n, rng), *scuff_band) * np.exp(-t * 110) * 0.35 + 0.25 * np.sin(ph * 1.3) * np.exp(-t * 55))
+    out[dt:] += toe[:n - dt].astype(np.float32) * v
+    # cloth/shoe scuff
+    sc = _bp(_noise(n, rng), 2500, 9000) * np.exp(-((t - 0.02) / 0.03) ** 2) * 0.06
+    out += sc.astype(np.float32) * v
+    out *= np.minimum(1, t / 0.0015)
+    return out
+
+
+# ------------------------------------------------------------------ sfx
+def sfx(name, rng):
+    if name == "pop":
+        t = _t(0.18)
+        f = 900 * np.exp(-t * 22) + 250
+        return (np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 25) * 0.7).astype(np.float32)
+    if name == "whoosh":
+        t = _t(0.45)
+        nz = _noise(len(t), rng)
+        env = np.sin(np.pi * t / t[-1]) ** 2
+        out = np.zeros_like(nz)
+        for i, (lo, hi) in enumerate([(300, 900), (700, 1800), (1500, 3500), (2500, 6000)]):
+            w = np.exp(-((t / t[-1] - (0.15 + 0.22 * i)) / 0.2) ** 2)
+            out += _bp(nz, lo, hi) * w
+        return (out * env * 0.9).astype(np.float32)
+    if name == "boing":
+        t = _t(0.6)
+        f = 180 + 260 * np.exp(-t * 4) * (1 + 0.25 * np.sin(2 * np.pi * 14 * t))
+        y = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-t * 5)
+        return (np.tanh(y * 1.5) * 0.5).astype(np.float32)
+    if name == "scratch":  # record scratch
+        t = _t(0.5)
+        speed = np.where(t < 0.18, 1 - t / 0.18 * 1.6, -0.6 + (t - 0.18) * 2.2)
+        f = 380 + 900 * np.abs(speed)
+        saw = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR)
+        y = _bp(saw + 0.7 * _noise(len(t), rng), 300, 4000) * np.exp(-t * 3)
+        return (y / (np.max(np.abs(y)) + 1e-9) * 0.6).astype(np.float32)
+    if name == "ding":
+        t = _t(1.2)
+        y = sum(a * np.sin(2 * np.pi * f * t) * np.exp(-t * d) for f, a, d in
+                [(1568, 0.6, 3.5), (3136 * 1.01, 0.25, 6), (4704 * 1.02, 0.12, 9), (2093, 0.2, 4)])
+        return (y * 0.45).astype(np.float32)
+    if name == "splash":
+        t = _t(0.9)
+        nz = _noise(len(t), rng)
+        body = _bp(nz, 400, 5000) * np.exp(-t * 7)
+        y = body * 0.6
+        for _ in range(14):  # droplets
+            t0 = rng.uniform(0.05, 0.6)
+            f = rng.uniform(900, 2600)
+            i0 = int(t0 * SR)
+            tt = _t(0.06)
+            drop = np.sin(2 * np.pi * np.cumsum(f * (1 + 2 * tt / 0.06)) / SR) * np.exp(-tt * 70) * rng.uniform(0.1, 0.3)
+            y[i0:i0 + len(drop)] += drop[:len(y) - i0]
+        return y.astype(np.float32)
+    if name == "sizzle":
+        t = _t(1.0)
+        nz = _hp(_noise(len(t), rng), 3000)
+        crackle = (rng.random(len(t)) > 0.9985) * rng.uniform(0.5, 1, len(t))
+        y = nz * 0.12 * (0.6 + 0.4 * np.sin(2 * np.pi * 7 * t)) + _bp(crackle, 1500, 8000) * 2
+        return (y * np.minimum(1, (1 - t) * 4)).astype(np.float32)
+    if name == "water":  # running tap
+        t = _t(2.5)
+        nz = _noise(len(t), rng)
+        y = _bp(nz, 500, 6000) * 0.18 * (0.85 + 0.15 * np.sin(2 * np.pi * 3.3 * t))
+        env = np.minimum(1, t / 0.08) * np.minimum(1, (t[-1] - t) / 0.3)
+        return (y * env).astype(np.float32)
+    if name == "rustle":  # bag of rice
+        t = _t(0.7)
+        y = _bp(_noise(len(t), rng), 2000, 9000) * (rng.random(len(t)) > 0.6) * 0.3 * np.exp(-t * 3)
+        y += _bp(_noise(len(t), rng), 200, 1200) * 0.15 * np.exp(-t * 5)
+        return y.astype(np.float32)
+    if name == "thud":
+        t = _t(0.4)
+        y = np.sin(2 * np.pi * np.cumsum(120 * np.exp(-t * 8) + 45) / SR) * np.exp(-t * 14)
+        return (y * 0.9).astype(np.float32)
+    if name == "sparkle":
+        out = np.zeros(int(0.9 * SR), dtype=np.float32)
+        for i, f in enumerate([1760, 2217, 2637, 3520]):
+            tt = _t(0.6)
+            tone = np.sin(2 * np.pi * f * tt) * np.exp(-tt * 9) * 0.22
+            i0 = int(i * 0.07 * SR)
+            out[i0:i0 + len(tone)] += tone[:len(out) - i0]
+        return out
+    if name == "hit":  # comedic impact
+        t = _t(0.35)
+        y = np.sin(2 * np.pi * np.cumsum(200 * np.exp(-t * 20) + 60) / SR) * np.exp(-t * 10)
+        y += _bp(_noise(len(t), rng), 800, 5000) * np.exp(-t * 40) * 0.5
+        return (y * 0.8).astype(np.float32)
+    raise KeyError(name)
+
+
+# ------------------------------------------------------------------ music
+NOTE = {n: i for i, n in enumerate(["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"])}
+
+
+def midi_hz(m):
+    return 440.0 * 2 ** ((m - 69) / 12)
+
+
+def pluck(freq, dur, rng, bright=0.5, decay=0.996):
+    """Karplus-Strong plucked string (ukulele / pizzicato bass), vectorised per period."""
+    n = int(dur * SR)
+    p = max(2, int(SR / freq))
+    buf = rng.uniform(-1, 1, p)
+    buf = _lp(buf, 800 + bright * 6000) if p > 12 else buf
+    out = np.zeros(n + p + 1)
+    out[:p] = buf
+    i = p
+    while i < n + 1:
+        k = min(p, n + 1 - i)
+        out[i:i + k] = decay * 0.5 * (out[i - p:i - p + k] + out[i - p + 1:i - p + 1 + k])
+        i += k
+    y = out[:n]
+    return y * np.minimum(1, np.arange(n) / 30)
+
+
+def marimba(freq, dur):
+    t = _t(dur)
+    y = (np.sin(2 * np.pi * freq * t) * np.exp(-t * 6) + 0.35 * np.sin(2 * np.pi * freq * 3.93 * t) * np.exp(-t * 22)
+         + 0.12 * np.sin(2 * np.pi * freq * 9.2 * t) * np.exp(-t * 50))
+    return y * np.minimum(1, t / 0.002)
+
+
+def music(duration, seed=1, bpm=124, key="C", mood="bouncy"):
+    """An original comedic ukulele/marimba groove. Deterministic per seed."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    root = 60 + NOTE[key]
+    n = int((duration + 2) * SR)
+    mix = np.zeros(n)
+    progs = {
+        "bouncy": [(0, "maj"), (9, "min"), (5, "maj"), (7, "maj")],
+        "sneaky": [(0, "min"), (5, "min"), (3, "maj"), (7, "maj")],
+    }
+    prog = progs.get(mood, progs["bouncy"])
+    quality = {"maj": [0, 4, 7], "min": [0, 3, 7]}
+    scale = [0, 2, 4, 7, 9] if mood == "bouncy" else [0, 3, 5, 7, 10]
+
+    def add(y, t0, g):
+        i0 = int(t0 * SR)
+        if i0 >= n:
+            return
+        y = y[:n - i0]
+        mix[i0:i0 + len(y)] += g * y
+
+    # melody motif: 2 bars of eighth notes, generated once and varied
+    motif = []
+    deg = 2
+    for k in range(16):
+        if rng.random() < 0.28 and k % 2 == 1:
+            motif.append(None)
+            continue
+        deg = int(np.clip(deg + rng.choice([-2, -1, 1, 1, 2]), 0, 9))
+        motif.append(deg)
+
+    bars = int(duration / (4 * beat)) + 2
+    for b in range(bars):
+        t_bar = b * 4 * beat
+        deg_root, q = prog[b % len(prog)]
+        chord = [root + deg_root + iv for iv in quality[q]]
+        # bass: oom-pah with octave bounce
+        for k, (beat_i, octv) in enumerate([(0, -24), (1.5, -12), (2, -24), (3.5, -12)]):
+            add(pluck(midi_hz(chord[0] + octv), beat * 1.2, rng, bright=0.25, decay=0.993), t_bar + beat_i * beat, 0.55)
+        # ukulele strums on the off-beats
+        for beat_i in (1, 3, 3.5):
+            for j, m in enumerate(chord + [chord[0] + 12]):
+                add(pluck(midi_hz(m), beat * 1.6, rng, bright=0.7, decay=0.995), t_bar + beat_i * beat + j * 0.012, 0.16)
+        # marimba melody (skip the first bar so the hook breathes)
+        if b >= 1:
+            half = (b % 2) * 8
+            for k in range(8):
+                d = motif[half + k]
+                if d is None:
+                    continue
+                if b % 4 == 3 and k >= 6:
+                    continue
+                m = root + 12 + scale[d % 5] + 12 * (d // 5)
+                add(marimba(midi_hz(m), beat * 1.5), t_bar + k * beat / 2, 0.22)
+        # light percussion
+        for k in range(8):
+            tt = t_bar + k * beat / 2
+            nz = _hp(_noise(int(0.05 * SR), rng), 7000) * np.exp(-_t(0.05) * 90)
+            add(nz, tt, 0.1 if k % 2 else 0.05)
+        for beat_i in (0, 2):
+            tk = _t(0.25)
+            kick = np.sin(2 * np.pi * np.cumsum(50 + 90 * np.exp(-tk * 30)) / SR) * np.exp(-tk * 14)
+            add(kick, t_bar + beat_i * beat, 0.45)
+        for beat_i in (1, 3):
+            snap = _bp(_noise(int(0.12 * SR), rng), 1200, 6000) * np.exp(-_t(0.12) * 45)
+            add(snap, t_bar + beat_i * beat, 0.28)
+    mix = mix[:int(duration * SR)]
+    fade = int(0.8 * SR)
+    mix[-fade:] *= np.linspace(1, 0, fade)
+    mix /= np.max(np.abs(mix)) + 1e-9
+    return room_reverb(mix, wet=0.1).astype(np.float32)
