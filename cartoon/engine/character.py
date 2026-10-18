@@ -20,7 +20,7 @@ HIP_H = 326
 THIGH, SHIN, ANKLE_H = 150, 148, 30
 TORSO = 228
 UPPER, FORE = 118, 112
-HALF_STRIDE = 160
+HALF_STRIDE = 170
 LIFT = 52
 HEAD_RX, HEAD_RY = 118, 124
 FX = 22  # how far the face is turned towards the front (3/4 view)
@@ -50,6 +50,18 @@ def rot(p, pivot, deg):
     c, s = math.cos(a), math.sin(a)
     x, y = p[0] - pivot[0], p[1] - pivot[1]
     return pivot[0] + x * c - y * s, pivot[1] + x * s + y * c
+
+
+FOOT_HEEL = (-22.0, 30.0)  # floor contact points relative to the ankle (flat foot)
+FOOT_TOE = (40.0, 30.0)
+LEG_MAX = (THIGH + SHIN) * 0.985  # stance leg almost straight, like a real walk
+SWING_LIFT = 30
+
+
+def _about(pivot, rel, ang):
+    """Ankle position when the foot rotates by ang (toe up +) about a floor pivot."""
+    v = rot(rel, (0.0, 0.0), -ang)
+    return pivot[0] - v[0], pivot[1] - v[1]
 
 
 def ik2(root, target, l1, l2, prefer):
@@ -279,31 +291,40 @@ class Character:
             self.frames.append((phase, w, v))
 
     # geometry ---------------------------------------------------------------
-    def _leg_target(self, p, w, side_x, air):
-        if p < 0.5:
-            u = p / 0.5
-            fx = HALF_STRIDE / 2 - HALF_STRIDE * u
-            fy = 0.0
-            ang = 12 * (1 - smooth(u / 0.18)) - 24 * smooth((u - 0.72) / 0.28)
-        else:
-            u = (p - 0.5) / 0.5
-            e = smooth(u)
-            fx = -HALF_STRIDE / 2 + HALF_STRIDE * e
-            fy = -LIFT * math.sin(math.pi * u)
-            ang = -24 * (1 - smooth(u / 0.4)) + 12 * smooth((u - 0.6) / 0.4)
-        sx, sy, sa = side_x, 0.0, 0.0
-        x = sx + (fx * 1.0 - sx) * w
-        y = sy + (fy - sy) * w
-        a = sa + (ang - sa) * w
-        y -= 38 * air
-        return (x, -ANKLE_H + y), a
+    @staticmethod
+    def _gait_foot(p, S, D):
+        """Ankle position (relative to its hip, y up = negative) and foot angle (toe up = +)
+        for gait phase p (0 = heel strike).  Stance (0..S): heel strike -> flat foot -> heel
+        rise rolling over the toes, with the contact point fixed on the floor.  Swing (S..1):
+        knee folds, foot clears the floor and reaches forward for the next heel strike."""
+
+        def stance(u):
+            xa = D * S / 2 - D * S * u  # where the ankle would be with the foot flat
+            if u < 0.14:  # heel contact, foot slaps down
+                ang = 18 * (1 - smooth(u / 0.14))
+                return _about(((xa + FOOT_HEEL[0], 0.0)), FOOT_HEEL, ang), ang
+            if u < 0.55:
+                return (xa, -ANKLE_H), 0.0
+            ang = -38 * smooth((u - 0.55) / 0.45)  # heel rises, roll over the toes
+            return _about((xa + FOOT_TOE[0], 0.0), FOOT_TOE, ang), ang
+
+        if p < S:
+            return stance(p / S)
+        v = (p - S) / (1 - S)
+        (x0, y0), a0 = stance(1.0)
+        (x1, y1), a1 = stance(0.0)
+        e = v * v * (3 - 2 * v)
+        x = x0 + (x1 - x0) * e
+        y = y0 + (y1 - y0) * v - SWING_LIFT * math.sin(math.pi * v ** 0.75)
+        a = a0 * (1 - smooth(v / 0.45)) + a1 * smooth((v - 0.55) / 0.45)  # foot levels out, then toe lifts for the heel strike
+        return (x, y), a
 
     def _world(self, p, st):
         return (st["X"] + st["fs"] * p[0], st["G"] + st["Y"] + st["sy"] * p[1])
 
     def _arm(self, t, side, shoulder, st, walk_swing):
         ang = self.tr["arm" + side].at(t)
-        s_a, e_a = ang[0] + walk_swing, ang[1] + abs(walk_swing) * 0.4
+        s_a, e_a = ang[0] + walk_swing[0], ang[1] + walk_swing[1]
         elbow = (shoulder[0] + UPPER * dirv(s_a)[0], shoulder[1] + UPPER * dirv(s_a)[1])
         fore = s_a + e_a
         wrist = (elbow[0] + FORE * dirv(fore)[0], elbow[1] + FORE * dirv(fore)[1])
@@ -350,12 +371,35 @@ class Character:
         s = self.s
         st = dict(X=X, Y=Y, G=ground_y, fs=face * s * sqx, sy=s * sqy)
         air = clamp(-Y / 60.0)
-        lean = tr["lean"].at(t) + w * 4
+        run = clamp((v - 450) / 350) * w
+        pF, pB = phase % 1.0, (phase + 0.5) % 1.0
+        lean = tr["lean"].at(t) + w * 3 + run * 9 + 1.2 * w * math.cos(4 * math.pi * phase)
         tilt = tr["tilt"].at(t)
         crouch = tr["crouch"].at(t)
-        bob = 7 * 0.5 * (1 + math.cos(4 * math.pi * phase)) * w
         breathe = math.sin(t * 2 * math.pi / 3.1 + self.blink_seed) * 2.0
-        hip = (0.0, -HIP_H + bob + crouch * 70 + 4 + 12 * w)
+        hipxF, hipxB = 10.0, -12.0
+
+        # walking legs: real gait timing (60% stance / 40% swing; less stance when running)
+        S = 0.6 - 0.2 * run
+        D = 2 * HALF_STRIDE * (1 + 0.2 * clamp((v - 320) / 500))
+        (wF, waF) = self._gait_foot(pF, S, D)
+        (wB, waB) = self._gait_foot(pB, S, D)
+        # pelvis height: the body vaults over the straight stance leg (inverted pendulum)
+        hy = -1e9
+        for p_, (ax, ay) in ((pF, wF), (pB, wB)):
+            c = ay - math.sqrt(max(1.0, LEG_MAX ** 2 - ax ** 2))
+            if p_ >= S:  # swing leg only matters right before it lands
+                c -= (1 - smooth(((p_ - S) / (1 - S) - 0.65) / 0.35)) * 300
+            hy = max(hy, c)
+        hy = clamp(hy, -HIP_H + 2, -HIP_H + 60) + run * 14
+        stand_hy = -HIP_H + 4
+        hip = (0.0, stand_hy + (hy - stand_hy) * w + crouch * 70)
+        ankF = ((hipxF + 20) + (hipxF + wF[0] - hipxF - 20) * w, -ANKLE_H + (wF[1] + ANKLE_H) * w)
+        ankB = ((hipxB - 4) + (hipxB + wB[0] - hipxB + 4) * w, -ANKLE_H + (wB[1] + ANKLE_H) * w)
+        aF, aB = waF * w, waB * w
+        if air > 0:  # tuck the feet in when airborne
+            ankF = (ankF[0] - 10 * air, ankF[1] - 38 * air)
+            ankB = (ankB[0] - 10 * air, ankB[1] - 38 * air)
         st["hip"], st["lean"] = hip, lean
 
         # torso frame points
@@ -367,21 +411,17 @@ class Character:
         st["nose_t"] = rot((neck[0] + 4 + nose_h[0], neck[1] - 110 + nose_h[1]), neck, -tilt)
         st["mouth_t"] = rot((neck[0] + 4 + FX + 18, neck[1] - 110 + 70), neck, -tilt)
 
-        # walk arm swing
-        pF = phase % 1.0
-        sw = 26 * w * tr["swing"].at(t)
-        swingF = -sw * math.cos(2 * math.pi * pF)
-        swingB = sw * math.cos(2 * math.pi * pF)
+        # arm swing opposite to the legs, slightly lagging; elbows flex on the forward swing
+        sw = (20 + 14 * run) * w * tr["swing"].at(t)
+        ph = 2 * math.pi * (pF - 0.04)
+        swingF = (-sw * math.cos(ph), w * (8 + 14 * max(0.0, -math.cos(ph))) + run * 55)
+        swingB = (sw * math.cos(ph), w * (8 + 14 * max(0.0, math.cos(ph))) + run * 55)
 
         elbF, wrF, foreF = self._arm(t, "F", shF, st, swingF)
         elbB, wrB, foreB = self._arm(t, "B", shB, st, swingB)
 
         # legs (local frame, not leaned)
-        hipF, hipB = (10.0, hip[1]), (-12.0, hip[1])
-        ankF, aF = self._leg_target(pF, w, 20.0, air)
-        ankB, aB = self._leg_target((phase + 0.5) % 1.0, w, -16.0, air)
-        ankF = (ankF[0] + 10, ankF[1])
-        ankB = (ankB[0] - 12, ankB[1])
+        hipF, hipB = (hipxF, hip[1]), (hipxB, hip[1])
         knee_pick = lambda a, b: a if a[0] > b[0] else b
         kneeF = ik2(hipF, ankF, THIGH, SHIN, knee_pick)
         kneeB = ik2(hipB, ankB, THIGH, SHIN, knee_pick)
