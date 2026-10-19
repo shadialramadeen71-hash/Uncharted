@@ -145,6 +145,8 @@ def room_reverb(x, wet=0.12, decay=0.35, seed=7):
 # ------------------------------------------------------------------ footsteps
 def footstep(rng, kind="sneaker", strength=1.0, speed=300.0):
     """Heel strike + toe roll on a wooden floor, randomised so no two steps are identical."""
+    if kind == "snow":
+        return snow_step(rng, strength, speed)
     d = 0.32
     t = _t(d)
     n = len(t)
@@ -159,6 +161,13 @@ def footstep(rng, kind="sneaker", strength=1.0, speed=300.0):
     if kind == "heel":  # harder sole, brighter click
         click = _bp(nz, 1800, 7000) * np.exp(-t * 140) * 1.4
         scuff_band = (1500, 6000)
+    elif kind == "leather":  # heavy old leather shoes on old floorboards
+        click = _bp(nz, 500, 3200) * np.exp(-t * 110) * 1.1
+        thump = thump * 1.35
+        creak_f = rng.uniform(380, 520)
+        creak = np.sin(2 * np.pi * np.cumsum(creak_f * (1 + 0.08 * np.sin(2 * np.pi * 31 * t))) / SR)
+        click = click + creak * np.exp(-((t - 0.09) / 0.05) ** 2) * 0.05 * (rng.random() < 0.4)
+        scuff_band = (700, 3500)
     else:
         click = _bp(nz, 350, 2600) * np.exp(-t * 90)
         scuff_band = (900, 4500)
@@ -172,6 +181,20 @@ def footstep(rng, kind="sneaker", strength=1.0, speed=300.0):
     out += sc.astype(np.float32) * v
     out *= np.minimum(1, t / 0.0015)
     return out
+
+
+def snow_step(rng, strength=1.0, speed=300.0):
+    """Boot compressing fresh snow: a dense burst of tiny crackles plus a soft low 'whump'."""
+    d = 0.38
+    t = _t(d)
+    n = len(t)
+    v = rng.uniform(0.85, 1.15) * strength
+    dens = np.exp(-((t - 0.06) / 0.07) ** 2) + 0.5 * np.exp(-((t - 0.16) / 0.06) ** 2)
+    clicks = (rng.random(n) < 0.045 * dens) * rng.uniform(0.3, 1.0, n)
+    crunch = _bp(clicks, 1200, 8000) * 2.2 + _bp(_noise(n, rng), 600, 4000) * 0.12 * dens
+    whump = np.sin(2 * np.pi * np.cumsum(70 + 40 * np.exp(-t * 30)) / SR) * np.exp(-t * 25) * 0.35
+    out = (crunch + whump) * v
+    return (out * np.minimum(1, t / 0.003)).astype(np.float32)
 
 
 # ------------------------------------------------------------------ sfx
@@ -253,6 +276,36 @@ def sfx(name, rng):
         y = np.sin(2 * np.pi * np.cumsum(200 * np.exp(-t * 20) + 60) / SR) * np.exp(-t * 10)
         y += _bp(_noise(len(t), rng), 800, 5000) * np.exp(-t * 40) * 0.5
         return (y * 0.8).astype(np.float32)
+    if name == "meow":
+        d = 0.75
+        t = _t(d)
+        u = t / d
+        f0 = 480 + 330 * np.sin(np.pi * np.clip(u * 1.15, 0, 1)) ** 1.5 - 90 * u
+        F1 = 700 + 650 * np.sin(np.pi * np.clip(u * 1.1, 0, 1))  # "mi-aa-ow" formant sweep
+        ph = 2 * np.pi * np.cumsum(f0) / SR
+        y = np.zeros(len(t))
+        for k in range(1, 14):
+            a = np.exp(-((k * f0 - F1) / 380) ** 2) + 0.35 * np.exp(-((k * f0 - 2.6 * F1) / 700) ** 2)
+            y += a * np.sin(k * ph) / k ** 0.3
+        env = np.minimum(1, t / 0.05) * np.minimum(1, (d - t) / 0.18)
+        y = y * env + _bp(_noise(len(t), rng), 2000, 7000) * 0.02 * env
+        return (y / (np.max(np.abs(y)) + 1e-9) * 0.6).astype(np.float32)
+    if name == "slip":  # shoe squeak on ice + whoosh
+        t = _t(0.5)
+        f = 900 + 1500 * np.clip(t / 0.18, 0, 1)
+        sq = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-((t - 0.1) / 0.08) ** 2) * 0.5
+        wh = sfx("whoosh", rng)
+        sq[:len(wh)] += wh[:len(sq)] * 0.8
+        return sq.astype(np.float32)
+    if name == "chop":
+        t = _t(0.18)
+        y = _bp(_noise(len(t), rng), 900, 5000) * np.exp(-t * 90) + np.sin(2 * np.pi * 160 * t) * np.exp(-t * 45) * 0.8
+        return (y * 0.7).astype(np.float32)
+    if name == "sob":
+        t = _t(0.8)
+        f = 320 + 60 * np.sin(2 * np.pi * 7 * t)
+        y = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * (0.5 + 0.5 * np.sin(2 * np.pi * 5 * t)) * np.exp(-t * 2)
+        return (_bp(y, 300, 2500) * 0.3).astype(np.float32)
     raise KeyError(name)
 
 
@@ -360,3 +413,67 @@ def music(duration, seed=1, bpm=124, key="C", mood="bouncy"):
     mix[-fade:] *= np.linspace(1, 0, fade)
     mix /= np.max(np.abs(mix)) + 1e-9
     return room_reverb(mix, wet=0.1).astype(np.float32)
+
+
+def accordion(freq, dur, rng, bright=0.6):
+    """Musette accordion note: three reeds (one in tune, two detuned = the Paris 'wet' tremolo)."""
+    t = _t(dur)
+    y = np.zeros(len(t))
+    for det in (1.0, 1.0035, 0.9968):
+        ph = 2 * np.pi * freq * det * t + rng.uniform(0, 6.28)
+        y += signal.sawtooth(ph, 0.5 + 0.45 * bright) * 0.6 + signal.square(ph, 0.3) * 0.25
+    y = _lp(y, 1800 + 2600 * bright)
+    env = np.minimum(1, t / 0.035) * np.minimum(1, (dur - t) / 0.06)
+    return y * env * (0.92 + 0.08 * np.sin(2 * np.pi * 5.5 * t))
+
+
+def musette(duration, seed=1, bpm=168, key="A"):
+    """An original Parisian musette waltz (3/4): accordion melody, oom-pah-pah bass/chords, brushes."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    root = 57 + NOTE[key] - NOTE["A"]  # A3
+    n = int((duration + 2) * SR)
+    mix = np.zeros(n)
+
+    def add(y, t0, g):
+        i0 = int(t0 * SR)
+        if 0 <= i0 < n:
+            y = y[:n - i0]
+            mix[i0:i0 + len(y)] += g * y
+
+    prog = [(0, "min"), (5, "min"), (7, "maj"), (0, "min"), (8, "maj"), (5, "min"), (7, "maj"), (0, "min")]
+    quality = {"maj": [0, 4, 7], "min": [0, 3, 7]}
+    scale = [0, 2, 3, 5, 7, 8, 11]  # harmonic minor
+    # a 2-bar melodic cell (6 beats) built from chord tones with a chromatic run, varied per bar
+    cells = []
+    for _ in range(2):
+        rhythm = [[1, 0.5, 0.5, 1], [1.5, 0.5, 1], [0.5, 0.5, 0.5, 0.5, 1], [2, 1]][rng.integers(0, 4)]
+        cells.append(rhythm)
+    bars = int(duration / (3 * beat)) + 2
+    for b in range(bars):
+        t0 = b * 3 * beat
+        deg, q = prog[b % len(prog)]
+        chord = [root + deg + iv for iv in quality[q]]
+        add(accordion(midi_hz(chord[0] - 12), beat * 0.9, rng, 0.3), t0, 0.5)  # oom
+        for k in (1, 2):  # pah pah
+            for m in chord:
+                add(accordion(midi_hz(m), beat * 0.45, rng, 0.45), t0 + k * beat, 0.16)
+        if b >= 1:  # melody
+            tt = t0
+            rhythm = cells[b % 2]
+            for i, dur_b in enumerate(rhythm):
+                pick = chord[(i + b) % 3] + 12
+                if i == len(rhythm) - 1 and b % 4 == 3:
+                    pick = chord[0] + 12
+                elif rng.random() < 0.3:
+                    pick = root + 12 + scale[int(rng.integers(0, 7))]
+                add(accordion(midi_hz(pick), dur_b * beat * 0.95, rng, 0.75), tt, 0.3)
+                tt += dur_b * beat
+        for k in range(3):  # brushes
+            br = _bp(_noise(int(0.12 * SR), rng), 2500, 9000) * np.exp(-_t(0.12) * (25 if k else 12))
+            add(br, t0 + k * beat, 0.06 if k else 0.09)
+    mix = mix[:int(duration * SR)]
+    fade = int(0.8 * SR)
+    mix[-fade:] *= np.linspace(1, 0, fade)
+    mix /= np.max(np.abs(mix)) + 1e-9
+    return room_reverb(mix, wet=0.16, decay=0.6).astype(np.float32)

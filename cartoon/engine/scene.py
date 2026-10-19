@@ -9,6 +9,22 @@ from .character import OUTLINE, OW, ellipse, fill_stroke, hexrgb, limb, shade
 W, H = 1080, 1920
 GROUND = 1560
 FONT = "Inter Black"
+THEMES = {
+    "cartoon": dict(font="Inter Black", text=(1, 1, 1), hi=(1, 0.86, 0.1), stroke=(0.16, 0.12, 0.19),
+                    banner=(0.98, 0.3, 0.33), banner_text=(1, 1, 1), card=(1, 1, 1), card_text=(0.16, 0.12, 0.19),
+                    head=(0.18, 0.72, 0.4), ok=(0.2, 0.75, 0.35), bad=(0.9, 0.18, 0.2), upper=True, size=68, cap_y=640, hook_y=300,
+                    follow="FOLLOW FOR DAILY LIFE HACKS!"),
+    "euro": dict(font="DejaVu Serif", text=(0.98, 0.94, 0.84), hi=(1.0, 0.76, 0.34), stroke=(0.15, 0.09, 0.06),
+                 banner=(0.48, 0.13, 0.11), banner_text=(0.98, 0.94, 0.84), card=(0.95, 0.9, 0.78),
+                 card_text=(0.2, 0.13, 0.09), head=(0.22, 0.33, 0.47), ok=(0.3, 0.52, 0.3), bad=(0.68, 0.2, 0.15),
+                 upper=False, size=64, cap_y=560, hook_y=250, follow="Follow for more Albert & Mimi"),
+}
+THEME = dict(THEMES["cartoon"])
+
+
+def set_theme(name):
+    THEME.clear()
+    THEME.update(THEMES[name])
 
 
 def rrect(ctx, x, y, w, h, r):
@@ -460,7 +476,7 @@ def stamp(ctx, x, y, u, good):
 
 # ------------------------------------------------------------------ text / UI
 def set_font(ctx, size):
-    ctx.select_font_face(FONT, cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
+    ctx.select_font_face(THEME["font"], cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
     ctx.set_font_size(size)
 
 
@@ -499,10 +515,10 @@ def wrap_words(ctx, words, size, maxw):
 
 def captions(ctx, line, t, y=640):
     """Word-by-word karaoke captions, paged two lines at a time."""
-    words = [w[2].upper() for w in line["words"]]
+    words = [w[2].upper() if THEME["upper"] else w[2] for w in line["words"]]
     if not words:
         return
-    size = 68
+    size = THEME["size"]
     lines, space = wrap_words(ctx, words, size, 880)
     cur = 0
     for i, (s, e, _) in enumerate(line["words"]):
@@ -524,19 +540,19 @@ def captions(ctx, line, t, y=640):
     set_font(ctx, 34)
     tw = ctx.text_extents(tag).x_advance
     box(ctx, -tw / 2 - 20, -total / 2 - 70, tw + 40, 52, line["color"], 26, ow=5)
-    text(ctx, tag, 0, -total / 2 - 32, 34, (1, 1, 1), stroke=0)
+    text(ctx, tag, 0, -total / 2 - 32, 34, THEME["banner_text"], stroke=0)
     for li, (ws, lw) in enumerate(page):
         x = -lw / 2
         yy = -total / 2 + lh * (li + 0.8)
         for (i, wd, ww) in ws:
             active = i == cur
-            col = (1, 0.86, 0.1) if active else (1, 1, 1)
+            col = THEME["hi"] if active else THEME["text"]
             ctx.save()
             if active:
                 ctx.translate(x + ww / 2, yy - size * 0.35)
                 ctx.scale(1.12, 1.12)
                 ctx.translate(-(x + ww / 2), -(yy - size * 0.35))
-            text(ctx, wd, x, yy, size, col, stroke=16, align="left")
+            text(ctx, wd, x, yy, size, col, stroke=16, align="left", stroke_color=THEME["stroke"])
             ctx.restore()
             x += ww + space
     ctx.restore()
@@ -552,10 +568,10 @@ def hook_title(ctx, t, lines, t_end):
             sc = EASE["back"](u)
             wob = math.sin(t * 9 + i) * 0.03
             ctx.save()
-            ctx.translate(W / 2, 300 + i * 120)
+            ctx.translate(W / 2, THEME["hook_y"] + i * 115)
             ctx.rotate(-0.04 + wob)
             ctx.scale(sc, sc)
-            text(ctx, s, 0, 0, 96 if i == 0 else 84, hexrgb(color), stroke=20)
+            text(ctx, s, 0, 0, 92 if i == 0 else 80, hexrgb(color), stroke=20, stroke_color=THEME["stroke"])
             ctx.restore()
     else:
         u = clamp((t - t_end) / 0.3)
@@ -565,8 +581,8 @@ def hook_title(ctx, t, lines, t_end):
         ctx.save()
         ctx.translate(W / 2, 230)
         ctx.scale(EASE["back"](u), EASE["back"](u))
-        box(ctx, -tw / 2 - 26, -44, tw + 52, 66, (0.98, 0.3, 0.33), 33, ow=6)
-        text(ctx, s, 0, 2, 40, (1, 1, 1), stroke=0)
+        box(ctx, -tw / 2 - 26, -44, tw + 52, 66, THEME["banner"], 33, ow=6)
+        text(ctx, s, 0, 2, 40, THEME["banner_text"], stroke=0)
         ctx.restore()
 
 
@@ -585,9 +601,9 @@ def tip_card(ctx, t, tip):
     rrect(ctx, 10, 14, cw, ch, 36)
     ctx.set_source_rgba(0, 0, 0, 0.25)
     ctx.fill()
-    box(ctx, 0, 0, cw, ch, (1, 1, 1), 36, ow=8)
-    box(ctx, 0, 0, cw, 96, tip.get("color", (0.18, 0.72, 0.4)), 36, ow=8)
-    text(ctx, tip["title"], cw / 2, 68, 56, (1, 1, 1), stroke=0)
+    box(ctx, 0, 0, cw, ch, THEME["card"], 36, ow=8)
+    box(ctx, 0, 0, cw, 96, tip.get("color", THEME["head"]), 36, ow=8)
+    text(ctx, tip["title"], cw / 2, 68, 56, THEME["banner_text"], stroke=0)
     for i, (ok, s) in enumerate(rows):
         ru = clamp((t - tip["t0"] - 0.3 - i * 0.25) / 0.3)
         if ru <= 0:
@@ -597,7 +613,7 @@ def tip_card(ctx, t, tip):
         ctx.translate(70, y)
         ctx.scale(EASE["back"](ru), EASE["back"](ru))
         ctx.arc(0, 0, 30, 0, 2 * math.pi)
-        fill_stroke(ctx, (0.2, 0.75, 0.35) if ok else (0.9, 0.18, 0.2), ow=5)
+        fill_stroke(ctx, THEME["ok"] if ok else THEME["bad"], ow=5)
         ctx.set_source_rgb(1, 1, 1)
         ctx.set_line_width(9)
         ctx.set_line_cap(1)
@@ -612,7 +628,7 @@ def tip_card(ctx, t, tip):
             ctx.line_to(-11, 11)
         ctx.stroke()
         ctx.restore()
-        text(ctx, s, 125, y + 17, 48, OUTLINE, stroke=0, align="left")
+        text(ctx, s, 125, y + 17, 46, THEME["card_text"], stroke=0, align="left")
     ctx.restore()
 
 
@@ -624,9 +640,9 @@ def follow_card(ctx, t, t0):
     ctx.save()
     ctx.translate(W / 2, 1450)
     ctx.scale(sc, sc)
-    s = "FOLLOW FOR DAILY LIFE HACKS!"
+    s = THEME["follow"]
     set_font(ctx, 46)
     tw = ctx.text_extents(s).x_advance
-    box(ctx, -tw / 2 - 30, -50, tw + 60, 80, (0.98, 0.3, 0.33), 40, ow=7)
-    text(ctx, s, 0, 6, 46, (1, 1, 1), stroke=0)
+    box(ctx, -tw / 2 - 30, -50, tw + 60, 80, THEME["banner"], 40, ow=7)
+    text(ctx, s, 0, 6, 46, THEME["banner_text"], stroke=0)
     ctx.restore()

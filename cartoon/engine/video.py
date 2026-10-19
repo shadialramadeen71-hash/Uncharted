@@ -7,7 +7,7 @@ import wave
 import cairo
 import numpy as np
 
-from . import audio, scene
+from . import audio, character, euro, scene
 from .anim import Track, clamp
 from .character import Character
 
@@ -17,7 +17,7 @@ BASE_ZOOM, BASE_CY = 1.12, 1040.0
 
 
 class Episode:
-    def __init__(self, title, hook, scene_name, music_seed=1, mood="bouncy", bpm=124):
+    def __init__(self, title, hook, scene_name, music_seed=1, mood="bouncy", bpm=124, theme="cartoon", floor=None):
         self.title = title
         self.hook = hook  # [(text, color), ...]
         self.hook_end = 2.4
@@ -31,6 +31,8 @@ class Episode:
         self.tip = None
         self.follow_at = None
         self.end = None
+        self.theme = theme
+        self.floor = floor  # e.g. "snow" overrides every character's footstep sound
         self.cam = {"zoom": Track(BASE_ZOOM), "cx": Track(540.0), "cy": Track(BASE_CY), "shake": Track(0.0)}
 
     # authoring -------------------------------------------------------------------
@@ -125,7 +127,7 @@ def _mix(ep, dur, path):
     # footsteps (real-time positioned, panned with the walker)
     steps = np.zeros(n)
     for c in ep.chars.values():
-        kind = c.look.get("step", "sneaker")
+        kind = ep.floor or c.look.get("step", "sneaker")
         for st in c.steps:
             fs = audio.footstep(rng, kind, strength=st["w"], speed=st["speed"])
             i0 = int(st["t"] * audio.SR)
@@ -137,7 +139,10 @@ def _mix(ep, dur, path):
     for (t, name, g) in ep.sfx:
         put(audio.sfx(name, rng), t, 0.7 * g)
     # music with side-chain ducking under dialogue
-    mus = audio.music(dur, ep.music_seed, ep.bpm, mood=ep.mood)
+    if ep.mood == "musette":
+        mus = audio.musette(dur, ep.music_seed, ep.bpm)
+    else:
+        mus = audio.music(dur, ep.music_seed, ep.bpm, mood=ep.mood)
     mus = np.pad(mus, (0, max(0, n - len(mus))))[:n]
     k = int(0.15 * audio.SR)
     duck = np.convolve(voice, np.ones(k) / k, mode="same")
@@ -163,6 +168,9 @@ def _active_line(ep, t):
 
 
 def build(ep, choreo, out_path, preview_frames=None):
+    character.set_style(ep.theme)
+    scene.set_theme(ep.theme)
+    character.STYLE["k"] = 0
     _voice_pass(ep)
     L = ep.lines
     choreo(ep, L)
@@ -180,6 +188,10 @@ def build(ep, choreo, out_path, preview_frames=None):
 
     bg = scene.make_background(ep.scene)
     vig = scene.vignette()
+    post = None
+    if ep.theme == "euro":
+        bg = euro.watercolorize(bg)
+        post = euro.Post()
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, scene.W, scene.H)
     ctx = cairo.Context(surf)
 
@@ -195,6 +207,7 @@ def build(ep, choreo, out_path, preview_frames=None):
     chars = sorted(ep.chars.values(), key=lambda c: c.z)
     for fi in frames:
         t = fi / FPS
+        character.STYLE["k"] = fi // 3  # ink lines "boil" like hand-drawn animation
         ctx.save()
         z = ep.cam["zoom"].at(t) * (1 + 0.012 * t / dur)  # slow push-in keeps the frame alive
         sh = ep.cam["shake"].at(t)
@@ -210,6 +223,8 @@ def build(ep, choreo, out_path, preview_frames=None):
         for fn in ep.layers["front"]:
             fn(ctx, t)
         ctx.restore()
+        if post:
+            post.apply(ctx, fi)
         ctx.set_source_surface(vig, 0, 0)
         ctx.paint()
         # UI
@@ -217,7 +232,7 @@ def build(ep, choreo, out_path, preview_frames=None):
         ln = _active_line(ep, t)
         tip_on = ep.tip and t >= ep.tip["t0"]
         if ln:
-            scene.captions(ctx, ln, t, y=1270 if tip_on else 640)
+            scene.captions(ctx, ln, t, y=1270 if tip_on else scene.THEME["cap_y"])
         if tip_on:
             scene.tip_card(ctx, t, ep.tip)
         for fn in ep.layers["ui"]:
