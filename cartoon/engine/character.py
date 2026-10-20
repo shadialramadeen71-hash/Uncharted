@@ -561,6 +561,16 @@ class Character:
         limb(ctx, [(neck[0], neck[1] + 10), (neck[0] + 2, neck[1] - 30)], L.get("neck_w", 40), skin)
         if L.get("scarf"):
             self._draw_scarf(ctx, neck, t)
+        if L.get("bowtie"):
+            nx_, ny_ = neck[0] + 16, neck[1] + 14
+            for d in (-1, 1):
+                ctx.move_to(nx_, ny_)
+                ctx.line_to(nx_ + 26 * d, ny_ - 14)
+                ctx.line_to(nx_ + 26 * d, ny_ + 14)
+                ctx.close_path()
+                fill_stroke(ctx, L["bowtie"], ow=3.5)
+            ellipse(ctx, nx_, ny_, 7, 7)
+            fill_stroke(ctx, L["bowtie"], ow=3)
         self._draw_head(ctx, hc, t, hs)
         ctx.restore()
         self._draw_arm(ctx, shF, elbF, wrF, foreF, tr["handF"].at(t), 1.0)
@@ -622,6 +632,40 @@ class Character:
         ctx.restore()
         if L.get("coat"):
             self._draw_coat(ctx, hx, hy, top, bw)
+        if L.get("apron"):
+            self._draw_apron(ctx, hx, hy, top, bw)
+
+    def _draw_apron(self, ctx, hx, hy, top, bw):
+        c = self.look["apron"]
+        bottom = hy + self.look.get("apron_len", 150)
+        if self.look.get("apron_waist"):  # waiter's apron: tied at the waist
+            top = hy - 30 - 52 + 0.0
+            ctx.move_to(-44 * bw, hy - 30)
+            ctx.line_to(84 * bw, hy - 30)
+            ctx.curve_to(96 * bw, hy + 40, 100 * bw, bottom - 40, 104 * bw, bottom)
+            ctx.curve_to(40 * bw, bottom + 12, -30 * bw, bottom + 12, -60 * bw, bottom)
+            ctx.curve_to(-56 * bw, bottom - 40, -50 * bw, hy + 40, -44 * bw, hy - 30)
+            ctx.close_path()
+            fill_stroke(ctx, c)
+            return
+        ctx.move_to(-34 * bw, top + 52)
+        ctx.line_to(74 * bw, top + 52)
+        ctx.line_to(80 * bw, hy - 30)
+        ctx.curve_to(96 * bw, hy + 40, 100 * bw, bottom - 40, 104 * bw, bottom)
+        ctx.curve_to(40 * bw, bottom + 12, -30 * bw, bottom + 12, -60 * bw, bottom)
+        ctx.curve_to(-56 * bw, bottom - 40, -50 * bw, hy + 40, -40 * bw, hy - 30)
+        ctx.close_path()
+        fill_stroke(ctx, c)
+        ctx.move_to(-34 * bw, top + 52)
+        ctx.line_to(-46 * bw, top + 4)
+        ctx.move_to(74 * bw, top + 52)
+        ctx.line_to(66 * bw, top + 4)
+        ink(ctx, shade(c, 0.7), 5)
+        ctx.rectangle(0, hy - 10, 56 * bw, 46)
+        ink(ctx, shade(c, 0.6), 2.5)
+        ctx.move_to(-48 * bw, hy - 36)
+        ctx.line_to(84 * bw, hy - 36)
+        ink(ctx, shade(c, 0.6), 3)
 
     def _draw_coat(self, ctx, hx, hy, top, bw):
         """Long coat skirt to the knees; its hem follows the knees so it swings when walking."""
@@ -701,6 +745,22 @@ class Character:
         ctx.close_path()
         ctx.set_source_rgba(0, 0, 0, 0.13)
         ctx.fill()
+        if STYLE["wobble"]:
+            for i in range(7):  # hatching on the shadow side
+                ctx.move_to(-100 + i * 11, hy + 10)
+                ctx.line_to(-60 + i * 11, top + 90)
+            ink(ctx, shade(L["top"], 0.62), 1.6)
+            for (x0, y0, x1, y1, x2, y2) in ((-20, hy - 30, 10, hy - 44, 40, hy - 34), (30, top + 80, 44, top + 110, 40, top + 140),
+                                              (-50, top + 120, -40, top + 150, -48, top + 176)):
+                ctx.move_to(x0, y0)
+                ctx.curve_to(x1, y1, x1, y1, x2, y2)  # fabric creases
+            ink(ctx, shade(L["top"], 0.55), 2.4)
+        if L.get("shirt_v"):  # open vest / jacket showing the shirt
+            ctx.move_to(-14, top - 2)
+            ctx.line_to(44, top - 2)
+            ctx.line_to(16, top + 110)
+            ctx.close_path()
+            fill_stroke(ctx, L["shirt_v"], ow=4)
         if L.get("pocket"):
             ctx.move_to(-30, hy - 70)
             ctx.line_to(52, hy - 70)
@@ -786,6 +846,14 @@ class Character:
         ellipse(ctx, -150, 30, 80, 150)
         ctx.set_source_rgba(0, 0, 0, 0.08)
         ctx.fill()
+        if STYLE["wobble"]:  # pen hatching on the shadow side, Franco-Belgian style
+            ellipse(ctx, -150, 40, 98, 150)
+            ctx.clip()
+            for i in range(9):
+                ctx.move_to(-150 + i * 12, 130)
+                ctx.line_to(-90 + i * 12, -40)
+            ink(ctx, shade(skin, 0.62), 1.8)
+            ctx.new_path()
         ctx.restore()
 
         f = FX
@@ -883,6 +951,13 @@ class Character:
             ctx.fill()
             ctx.arc(nx - 6, ny + 22, 7, 0.1 * math.pi, 0.9 * math.pi)
             ink(ctx, OUTLINE, 3)
+            ctx.new_path()
+        elif L.get("nose") == "long":  # long pointed nose
+            ctx.move_to(nx - 10, ny - 16)
+            ctx.curve_to(nx + 10, ny - 8, nx + 34, ny + 6, nx + 46, ny + 18)
+            ctx.curve_to(nx + 30, ny + 22, nx + 4, ny + 22, nx - 8, ny + 14)
+            ctx.close_path()
+            fill_stroke(ctx, shade(skin, 0.9), ow=4.5)
             ctx.new_path()
         elif L.get("nose") == "button":
             ellipse(ctx, nx - 6, ny + 6, 12, 10)
@@ -1000,6 +1075,21 @@ class Character:
                 ctx.set_line_width(3)
                 ctx.stroke()
 
+        if L.get("mustache"):  # curled waiter moustache
+            mc = L.get("mustache_c", hair)
+            for d in (-1, 1):
+                ctx.move_to(f + 46, 62)
+                ctx.curve_to(f + 46 + 26 * d, 54, f + 46 + 50 * d, 72, f + 46 + 56 * d, 50)
+                ctx.curve_to(f + 46 + 60 * d, 40, f + 46 + 48 * d, 36, f + 46 + 46 * d, 46)
+                ink(ctx, OUTLINE, 15)
+                ctx.move_to(f + 46, 62)
+                ctx.curve_to(f + 46 + 26 * d, 54, f + 46 + 50 * d, 72, f + 46 + 56 * d, 50)
+                ctx.curve_to(f + 46 + 60 * d, 40, f + 46 + 48 * d, 36, f + 46 + 46 * d, 46)
+                ctx.set_source_rgb(*mc)
+                ctx.set_line_width(9)
+                ctx.set_line_cap(1)
+                ctx.stroke()
+
         # front hair
         if style == "spiky":
             pts = []
@@ -1055,7 +1145,39 @@ class Character:
                 ctx.move_to(50 - k * 6, y0 + 4)
                 ctx.curve_to(10 - k * 8, y0 - 22 + k * 2, -60 - k * 6, y0 - 10 + k * 8, -110 + k * 2, -40 + k * 16)
                 ink(ctx, shade(hair, 0.74), 2.2)
+        elif style == "bun":  # grey hair pulled back into a bun
+            ctx.move_to(-HEAD_RX - 6, 20)
+            ctx.curve_to(-HEAD_RX - 14, -120, 60, -160, HEAD_RX + 2, -50)
+            ctx.curve_to(80, -84, 20, -90, -40, -70)
+            ctx.curve_to(-70, -50, -86, -10, -90, 20)
+            ctx.close_path()
+            fill_stroke(ctx, hair)
+            ellipse(ctx, -60, -140, 46, 40)
+            fill_stroke(ctx, hair)
+            ctx.arc(-60, -140, 24, 0.3, 5.5)
+            ink(ctx, shade(hair, 0.7), 2.5)
+            for k in range(4):
+                ctx.move_to(70 - k * 30, -84 + k * 6)
+                ctx.curve_to(30 - k * 30, -120, -40 - k * 20, -110, -80 - k * 8, -40 + k * 14)
+            ink(ctx, shade(hair, 0.72), 2)
+        elif style == "slick":  # slicked-back black hair with a shine
+            ctx.move_to(70, -92)
+            ctx.curve_to(60, -140, -40, -150, -100, -110)
+            ctx.curve_to(-130, -80, -128, -20, -110, 10)
+            ctx.curve_to(-100, -20, -90, -50, -60, -76)
+            ctx.curve_to(-20, -94, 30, -96, 70, -92)
+            ctx.close_path()
+            fill_stroke(ctx, hair)
+            ctx.move_to(40, -110)
+            ctx.curve_to(0, -134, -50, -128, -86, -100)
+            ink(ctx, (0.6, 0.6, 0.66), 4)
         elif style == "bob":
+            for side_x in (-HEAD_RX + 6, f + 92):  # locks framing the face
+                ctx.move_to(side_x - 12, -40)
+                ctx.curve_to(side_x - 24, 20, side_x - 10, 70, side_x + 6, 86)
+                ctx.curve_to(side_x + 16, 50, side_x + 14, 0, side_x + 12, -40)
+                ctx.close_path()
+                fill_stroke(ctx, hair, ow=4.5)
             ctx.move_to(-HEAD_RX - 14, 10)
             ctx.curve_to(-HEAD_RX - 20, -120, 70, -160, HEAD_RX + 8, -36)
             ctx.curve_to(100, -40, 80, -50, 66, -44)
@@ -1069,6 +1191,10 @@ class Character:
             fill_stroke(ctx, hair)
         if L.get("hat") == "beanie":
             hc_ = L.get("hat_c", (0.72, 0.2, 0.18))
+            ctx.save()
+            ctx.translate(0, -60)
+            ctx.scale(L.get("hat_s", 1.0), L.get("hat_s", 1.0))
+            ctx.translate(0, 60)
             ctx.move_to(-HEAD_RX - 6, -40)
             ctx.curve_to(-HEAD_RX, -190, HEAD_RX, -190, HEAD_RX + 4, -44)
             ctx.close_path()
@@ -1086,4 +1212,5 @@ class Character:
             fill_stroke(ctx, shade(hc_, 0.85))
             ellipse(ctx, -6, -176, 30, 28)
             fill_stroke(ctx, L.get("pompom", (0.95, 0.9, 0.8)))
+            ctx.restore()
         ctx.restore()

@@ -4,8 +4,15 @@ from engine.video import Episode
 from episodes.cast_euro import add_albert, add_mimi
 
 TITLE = "Icy sidewalk? Walk like a PENGUIN"
-DESCRIPTION = ("Grandpa Albert has walked on ice for 70 years... until today. Mimi's penguin walk: small flat steps, "
-               "arms out, lean slightly forward. #shorts #winter #lifehacks #safety #cartoon")
+DESCRIPTION = """Icy sidewalk? Walk like a PENGUIN 🐧
+
+70 years walking on ice… until today 😅 Mimi's penguin walk:
+✅ Small, flat steps
+✅ Arms out for balance
+✅ Lean slightly forward
+
+Tag someone who needs this before winter! 👇
+#shorts #winter #safety #lifehacks #cartoon"""
 
 ICE_X = 640
 LAMP = (1010, 760)

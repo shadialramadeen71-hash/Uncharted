@@ -570,7 +570,9 @@ def hook_title(ctx, t, lines, t_end):
             ctx.save()
             ctx.translate(W / 2, THEME["hook_y"] + i * 115)
             ctx.rotate(-0.04 + wob)
-            ctx.scale(sc, sc)
+            set_font(ctx, 92 if i == 0 else 80)
+            fit = min(1.0, 960 / max(1.0, ctx.text_extents(s).x_advance + 40))  # never run off screen
+            ctx.scale(sc * fit, sc * fit)
             text(ctx, s, 0, 0, 92 if i == 0 else 80, hexrgb(color), stroke=20, stroke_color=THEME["stroke"])
             ctx.restore()
     else:

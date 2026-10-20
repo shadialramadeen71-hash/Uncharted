@@ -306,6 +306,37 @@ def sfx(name, rng):
         f = 320 + 60 * np.sin(2 * np.pi * 7 * t)
         y = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * (0.5 + 0.5 * np.sin(2 * np.pi * 5 * t)) * np.exp(-t * 2)
         return (_bp(y, 300, 2500) * 0.3).astype(np.float32)
+    if name == "quack":
+        t = _t(0.28)
+        f = 260 * (1 - 0.25 * t / 0.28)
+        y = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR)
+        y = _bp(y, 700, 2600) * 1.6 + _bp(y, 2400, 4200) * 0.5
+        env = np.minimum(1, t / 0.015) * np.exp(-t * 6)
+        return (y * env / (np.max(np.abs(y * env)) + 1e-9) * 0.6).astype(np.float32)
+    if name == "clonk":  # rock-hard bread knocking on wood
+        t = _t(0.25)
+        y = (np.sin(2 * np.pi * 420 * t) * np.exp(-t * 40) + 0.6 * np.sin(2 * np.pi * 1130 * t) * np.exp(-t * 60)
+             + _bp(_noise(len(t), rng), 800, 4000) * np.exp(-t * 90) * 0.6)
+        return (y * 0.7).astype(np.float32)
+    if name == "crack":  # cartoon back "crack"
+        out = np.zeros(int(0.3 * SR), dtype=np.float32)
+        for k in range(3):
+            c = _bp(_noise(int(0.03 * SR), rng), 1500, 7000) * np.exp(-_t(0.03) * 150)
+            i0 = int(k * 0.05 * SR)
+            out[i0:i0 + len(c)] += c.astype(np.float32)
+        return out * 0.9
+    if name == "sip":
+        t = _t(0.5)
+        y = _bp(_noise(len(t), rng), 1500, 6000) * np.minimum(1, t / 0.05) * np.exp(-t * 4) * 0.25
+        return y.astype(np.float32)
+    if name == "bell":  # shop door bell
+        t = _t(1.0)
+        y = sum(a * np.sin(2 * np.pi * f * t) * np.exp(-t * d) for f, a, d in
+                [(2093, 0.5, 4), (2637, 0.35, 5), (4186, 0.15, 8)])
+        y2 = np.zeros_like(y)
+        k = int(0.12 * SR)
+        y2[k:] = y[:-k] * 0.7
+        return ((y + y2) * 0.4).astype(np.float32)
     raise KeyError(name)
 
 

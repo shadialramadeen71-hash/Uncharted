@@ -4,8 +4,17 @@ from engine.video import Episode
 from episodes.cast_euro import add_albert, add_mimi
 
 TITLE = "Frozen fingers? Never rub them with snow!"
-DESCRIPTION = ("Grandpa Albert comes in from the snow with frozen fingers and tries every old trick. Mimi knows "
-               "better: no rubbing, no hot stove - warm (not hot) water. #shorts #lifehacks #winter #firstaid #cartoon")
+DESCRIPTION = """Frozen fingers? NEVER rub them with snow! ❄️
+
+Grandpa Albert tries every old trick… Mimi knows the real one:
+✅ Warm water — not hot
+❌ Don't rub them
+❌ No stove or heater (numb skin burns easily)
+
+Did your family ever use the snow trick? 👇
+
+Not medical advice — see a doctor if skin turns white, grey or blistered.
+#shorts #winter #lifehacks #firstaid #cartoon"""
 
 WINDOW = (560, 400, 440, 640)
 BOWL = (720, 1270)

@@ -4,8 +4,15 @@ from engine.video import Episode
 from episodes.cast_euro import add_albert, add_mimi
 
 TITLE = "Onions make you cry? Try THIS"
-DESCRIPTION = ("Grandpa Albert cries a river over an onion (so does the cat). Mimi's fix: chill the onion for "
-               "15 minutes and use a sharp knife. #shorts #kitchenhacks #lifehacks #cooking #cartoon")
+DESCRIPTION = """Onions make you cry? Try THIS 🧅😭
+
+Grandpa Albert cries a river (so does the cat). Mimi's fix:
+✅ Chill the onion 15 minutes first
+✅ Use a sharp knife (dull ones crush it = more tears)
+✅ Cut near a fan or open window
+
+What's your onion trick? 👇
+#shorts #kitchenhacks #cooking #lifehacks #cartoon"""
 
 WINDOW = (560, 400, 440, 640)
 BOARD = (830, 1272)

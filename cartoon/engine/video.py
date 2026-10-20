@@ -7,7 +7,7 @@ import wave
 import cairo
 import numpy as np
 
-from . import audio, character, euro, scene
+from . import audio, character, euro, euro_places, scene  # noqa: F401 (euro_places registers backgrounds)
 from .anim import Track, clamp
 from .character import Character
 
