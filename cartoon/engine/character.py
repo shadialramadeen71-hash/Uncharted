@@ -38,6 +38,9 @@ def set_style(name):
     if name == "euro":
         OUTLINE.c = (0.17, 0.11, 0.08)
         STYLE.update(wobble=1.7, ow_k=0.72)
+    elif name == "flat":  # outline-free flat pastel look; only facial lines stay drawn
+        OUTLINE.c = (0.17, 0.16, 0.27)
+        STYLE.update(wobble=0.0, ow_k=0.0)
     else:
         OUTLINE.c = (0.16, 0.12, 0.19)
         STYLE.update(wobble=0.0, ow_k=1.0)
@@ -198,6 +201,21 @@ FINGER_LEN = [27, 30, 28, 22]
 FINGER_SPREAD = [-0.16, -0.03, 0.1, 0.24]
 
 
+def draw_paw(ctx, wrist, fore_deg, fur):
+    """Round bear paw (no fingers) with a pad."""
+    fx, fy = dirv(fore_deg)
+    ctx.save()
+    ctx.translate(*wrist)
+    ctx.rotate(math.atan2(fy, fx))
+    ellipse(ctx, 18, 0, 30, 27)
+    fill_stroke(ctx, fur)
+    for k in (-14, 0, 14):
+        ellipse(ctx, 40, k, 8, 7)
+        ctx.set_source_rgba(0, 0, 0, 0.18)
+        ctx.fill()
+    ctx.restore()
+
+
 def draw_hand(ctx, wrist, fore_deg, shape, skin):
     curls, spread, (th_a, th_c) = HANDS.get(shape, HANDS["relaxed"])
     fx, fy = dirv(fore_deg)
@@ -347,7 +365,8 @@ class Character:
             v = abs(dx) / dt
             target = clamp(v / 120.0)
             w += (target - w) * min(1.0, dt * 12)
-            stride = HALF_STRIDE * (1 + 0.2 * clamp((v - 320) / 500))
+            stride = (HALF_STRIDE * (1 + 0.2 * clamp((v - 320) / 500)) * self.look.get("stride", 1.0)
+                      * self.look.get("leg_k", 1.0) * (1 - 0.55 * self.tr["penguin"].at(t)))
             old = phase
             phase += abs(dx) / (2 * stride * self.s)
             if w > 0.3 and int(old * 2) != int(phase * 2):
@@ -449,6 +468,8 @@ class Character:
         run = clamp((v - 450) / 350) * w
         pF, pB = phase % 1.0, (phase + 0.5) % 1.0
         bw, hs = L.get("body_w", 1.0), L.get("head_s", 1.0)
+        lk = L.get("leg_k", 1.0)  # leg length multiplier (tall / short characters)
+        HH = ANKLE_H + (HIP_H - ANKLE_H) * lk
         pg = tr["penguin"].at(t)  # penguin walk on ice: short flat steps, rocking body
         lean = (tr["lean"].at(t) + w * 3 + run * 9 + 1.2 * w * math.cos(4 * math.pi * phase)
                 + L.get("stoop", 0.0) + pg * 6)
@@ -461,7 +482,7 @@ class Character:
 
         # walking legs: real gait timing (60% stance / 40% swing; less stance when running)
         S = 0.6 - 0.2 * run
-        D = 2 * HALF_STRIDE * (1 + 0.2 * clamp((v - 320) / 500)) * L.get("stride", 1.0) * (1 - 0.55 * pg)
+        D = 2 * HALF_STRIDE * (1 + 0.2 * clamp((v - 320) / 500)) * L.get("stride", 1.0) * lk * (1 - 0.55 * pg)
         lift = SWING_LIFT * L.get("lift", 1.0) * (1 - 0.5 * pg)
         (wF, waF) = self._gait_foot(pF, S, D, lift)
         (wB, waB) = self._gait_foot(pB, S, D, lift)
@@ -469,12 +490,12 @@ class Character:
         # pelvis height: the body vaults over the straight stance leg (inverted pendulum)
         hy = -1e9
         for p_, (ax, ay) in ((pF, wF), (pB, wB)):
-            c = ay - math.sqrt(max(1.0, LEG_MAX ** 2 - ax ** 2))
+            c = ay - math.sqrt(max(1.0, (LEG_MAX * lk) ** 2 - ax ** 2))
             if p_ >= S:  # swing leg only matters right before it lands
                 c -= (1 - smooth(((p_ - S) / (1 - S) - 0.65) / 0.35)) * 300
             hy = max(hy, c)
-        hy = clamp(hy, -HIP_H + 2, -HIP_H + 60) + run * 14
-        stand_hy = -HIP_H + 4
+        hy = clamp(hy, -HH + 2, -HH + 60 * lk) + run * 14
+        stand_hy = -HH + 4
         hip = (0.0, stand_hy + (hy - stand_hy) * w + crouch * 70)
         ankF = ((hipxF + 20) + (hipxF + wF[0] - hipxF - 20) * w, -ANKLE_H + (wF[1] + ANKLE_H) * w)
         ankB = ((hipxB - 4) + (hipxB + wB[0] - hipxB + 4) * w, -ANKLE_H + (wB[1] + ANKLE_H) * w)
@@ -488,7 +509,8 @@ class Character:
         neck = (6.0, hip[1] - TORSO - 6 + breathe * 0.3)
         sh_y = hip[1] - TORSO + 24 + breathe * 0.3
         shF, shB = (12.0 * bw, sh_y), (-14.0 * bw, sh_y)
-        hc = (neck[0] + 4, neck[1] - 110 * hs)
+        nl = L.get("neck_len", 0)
+        hc = (neck[0] + 4, neck[1] - 110 * hs - nl)
         head_c = rot(hc, neck, -tilt)
         nose_h = (FX + 52, 26)
         st["nose_t"] = rot((hc[0] + nose_h[0] * hs, hc[1] + nose_h[1] * hs), neck, -tilt)
@@ -508,8 +530,8 @@ class Character:
         # legs (local frame, not leaned)
         hipF, hipB = (hipxF, hip[1]), (hipxB, hip[1])
         knee_pick = lambda a, b: a if a[0] > b[0] else b
-        kneeF = ik2(hipF, ankF, THIGH, SHIN, knee_pick)
-        kneeB = ik2(hipB, ankB, THIGH, SHIN, knee_pick)
+        kneeF = ik2(hipF, ankF, THIGH * lk, SHIN * lk, knee_pick)
+        kneeB = ik2(hipB, ankB, THIGH * lk, SHIN * lk, knee_pick)
 
         # world joints for props
         to_local = lambda p: rot(p, hip, lean)
@@ -558,7 +580,7 @@ class Character:
         ctx.translate(*neck)
         ctx.rotate(rad(-tilt))
         ctx.translate(-neck[0], -neck[1])
-        limb(ctx, [(neck[0], neck[1] + 10), (neck[0] + 2, neck[1] - 30)], L.get("neck_w", 40), skin)
+        limb(ctx, [(neck[0], neck[1] + 10), (neck[0] + 2, neck[1] - 30 - nl)], L.get("neck_w", 40), skin)
         if L.get("scarf"):
             self._draw_scarf(ctx, neck, t)
         if L.get("bowtie"):
@@ -598,11 +620,12 @@ class Character:
             ctx.rectangle(-27, 22, 81, 8)
             ctx.set_source_rgb(*shade(L["sole"], k))
             ctx.fill()
-            ctx.move_to(-29, 31)
-            ctx.line_to(53, 31)
-            ctx.set_source_rgb(*OUTLINE)
-            ctx.set_line_width(OW)
-            ctx.stroke()
+            if STYLE["ow_k"]:
+                ctx.move_to(-29, 31)
+                ctx.line_to(53, 31)
+                ctx.set_source_rgb(*OUTLINE)
+                ctx.set_line_width(OW)
+                ctx.stroke()
         ctx.restore()
 
     def _draw_arm(self, ctx, sh, el, wr, fore, hand, k):
@@ -617,7 +640,10 @@ class Character:
             limb(ctx, [sh, el, wr], 33, skin)
             mid = (sh[0] + (el[0] - sh[0]) * 0.5, sh[1] + (el[1] - sh[1]) * 0.5)
             limb(ctx, [sh, mid], 46, top)
-        draw_hand(ctx, wr, fore, hand, skin)
+        if L.get("paw"):
+            draw_paw(ctx, wr, fore, skin)
+        else:
+            draw_hand(ctx, wr, fore, hand, skin)
 
     def _draw_torso(self, ctx, hip, breathe):
         L = self.look
@@ -725,15 +751,18 @@ class Character:
         if L.get("hood"):
             ellipse(ctx, -10, top + 8, 70, 30)
             fill_stroke(ctx, L["top2"])
-        ctx.move_to(-76, hy + 22)
-        ctx.curve_to(-86, hy - 60, -88, top + 70, -80, top + 34)
-        ctx.curve_to(-74, top + 8, -58, top, -40, top)
-        ctx.line_to(48, top)
-        ctx.curve_to(66, top, 80, top + 8, 86, top + 34)
-        b = L.get("belly", 0)
-        ctx.curve_to(92 + b * 0.5, top + 90, 90 + b, hy - 50, 80 + b * 0.4, hy + 22)
-        ctx.curve_to(40, hy + 36, -40, hy + 36, -76, hy + 22)
-        ctx.close_path()
+        if L.get("species") == "bear":  # round, soft bear body
+            ellipse(ctx, 4, (top + hy) / 2 + 6, 94, (hy - top) / 2 + 40)
+        else:
+            ctx.move_to(-76, hy + 22)
+            ctx.curve_to(-86, hy - 60, -88, top + 70, -80, top + 34)
+            ctx.curve_to(-74, top + 8, -58, top, -40, top)
+            ctx.line_to(48, top)
+            ctx.curve_to(66, top, 80, top + 8, 86, top + 34)
+            b = L.get("belly", 0)
+            ctx.curve_to(92 + b * 0.5, top + 90, 90 + b, hy - 50, 80 + b * 0.4, hy + 22)
+            ctx.curve_to(40, hy + 36, -40, hy + 36, -76, hy + 22)
+            ctx.close_path()
         path = ctx.copy_path()
         ctx.set_source_rgb(*L["top"])
         ctx.fill_preserve()
@@ -745,6 +774,10 @@ class Character:
         ctx.close_path()
         ctx.set_source_rgba(0, 0, 0, 0.13)
         ctx.fill()
+        if L.get("belly_patch"):
+            ellipse(ctx, 26, hy - 86, 66, 84)
+            ctx.set_source_rgb(*L["belly_patch"])
+            ctx.fill()
         if STYLE["wobble"]:
             for i in range(7):  # hatching on the shadow side
                 ctx.move_to(-100 + i * 11, hy + 10)
@@ -830,6 +863,13 @@ class Character:
             fill_stroke(ctx, hair)
             ellipse(ctx, -112, -46, 16, 20)
             fill_stroke(ctx, L.get("scrunchie", (0.95, 0.4, 0.55)))
+        if L.get("species") == "bear":  # round bear ears on top
+            for ex_, ey_ in ((-72, -96), (52, -108)):
+                ellipse(ctx, ex_, ey_, 36, 34)
+                fill_stroke(ctx, skin)
+                ellipse(ctx, ex_ + 2, ey_ + 2, 19, 18)
+                ctx.set_source_rgb(*L.get("muzzle", shade(skin, 1.3)))
+                ctx.fill()
         # ear
         ellipse(ctx, -96, 16, 19, 27)
         fill_stroke(ctx, skin)
@@ -943,7 +983,19 @@ class Character:
             ctx.stroke()
         # nose
         nx, ny = f + 52, 26
-        if L.get("nose") == "big":  # big bulbous caricature nose
+        if L.get("nose") == "bear":  # muzzle + shiny black nose
+            ellipse(ctx, f + 34, 42, 58, 44)
+            fill_stroke(ctx, L.get("muzzle", shade(skin, 1.3)))
+            ellipse(ctx, f + 56, 16, 21, 15)
+            fill_stroke(ctx, (0.12, 0.09, 0.09), ow=3)
+            ellipse(ctx, f + 50, 11, 6, 4)
+            ctx.set_source_rgba(1, 1, 1, 0.7)
+            ctx.fill()
+            ctx.move_to(f + 56, 30)
+            ctx.line_to(f + 56, 50)
+            ink(ctx, (0.25, 0.15, 0.12), 4)
+            ctx.new_path()
+        elif L.get("nose") == "big":  # big bulbous caricature nose
             ellipse(ctx, nx - 4, ny + 4, 32, 27)
             fill_stroke(ctx, shade(skin, 0.97))
             ellipse(ctx, nx + 4, ny + 8, 16, 12)
@@ -1145,6 +1197,17 @@ class Character:
                 ctx.move_to(50 - k * 6, y0 + 4)
                 ctx.curve_to(10 - k * 8, y0 - 22 + k * 2, -60 - k * 6, y0 - 10 + k * 8, -110 + k * 2, -40 + k * 16)
                 ink(ctx, shade(hair, 0.74), 2.2)
+        elif style == "tuft":
+            ctx.move_to(-HEAD_RX - 4, 10)
+            ctx.curve_to(-HEAD_RX - 10, -110, 50, -150, HEAD_RX - 4, -60)
+            ctx.curve_to(70, -80, 10, -86, -50, -60)
+            ctx.curve_to(-80, -40, -92, -10, -96, 14)
+            ctx.close_path()
+            fill_stroke(ctx, hair)
+            ctx.move_to(-10, -118)
+            ctx.curve_to(-30, -190, 50, -210, 40, -160)
+            ctx.curve_to(34, -136, 10, -150, 20, -168)
+            ink(ctx, hair, 16)
         elif style == "bun":  # grey hair pulled back into a bun
             ctx.move_to(-HEAD_RX - 6, 20)
             ctx.curve_to(-HEAD_RX - 14, -120, 60, -160, HEAD_RX + 2, -50)

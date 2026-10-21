@@ -7,7 +7,7 @@ import wave
 import cairo
 import numpy as np
 
-from . import audio, character, euro, euro_places, scene  # noqa: F401 (euro_places registers backgrounds)
+from . import audio, character, euro, euro_places, flat_places, scene  # noqa: F401 (*_places register backgrounds)
 from .anim import Track, clamp
 from .character import Character
 
@@ -17,10 +17,13 @@ BASE_ZOOM, BASE_CY = 1.12, 1040.0
 
 
 class Episode:
-    def __init__(self, title, hook, scene_name, music_seed=1, mood="bouncy", bpm=124, theme="cartoon", floor=None):
+    def __init__(self, title, hook, scene_name, music_seed=1, mood="bouncy", bpm=124, theme="cartoon", floor=None,
+                 max_len=MAX_LEN, ambience=None, hook_end=2.4):
         self.title = title
         self.hook = hook  # [(text, color), ...]
-        self.hook_end = 2.4
+        self.hook_end = hook_end
+        self.max_len = max_len
+        self.ambience = ambience  # background atmosphere ("city", "forest", "park"); mood=None means no music
         self.scene = scene_name
         self.music_seed, self.mood, self.bpm = music_seed, mood, bpm
         self.chars = {}
@@ -139,7 +142,9 @@ def _mix(ep, dur, path):
     for (t, name, g) in ep.sfx:
         put(audio.sfx(name, rng), t, 0.7 * g)
     # music with side-chain ducking under dialogue
-    if ep.mood == "musette":
+    if ep.mood is None:
+        mus = np.zeros(n)
+    elif ep.mood == "musette":
         mus = audio.musette(dur, ep.music_seed, ep.bpm)
     else:
         mus = audio.music(dur, ep.music_seed, ep.bpm, mood=ep.mood)
@@ -148,6 +153,9 @@ def _mix(ep, dur, path):
     duck = np.convolve(voice, np.ones(k) / k, mode="same")
     gain = 0.32 - 0.2 * np.clip(duck, 0, 1)
     put(mus * gain, 0.0, 1.0)
+    if ep.ambience:
+        amb = audio.ambience(ep.ambience, dur, ep.music_seed)
+        put(np.pad(amb, (0, max(0, n - len(amb))))[:n] * (0.55 - 0.25 * np.clip(duck, 0, 1)), 0.0, 1.0)
     L, R = audio.room_reverb(L, 0.06), audio.room_reverb(R, 0.06, seed=8)
     st = np.stack([L, R], 1)
     st /= np.max(np.abs(st)) + 1e-9
@@ -175,8 +183,8 @@ def build(ep, choreo, out_path, preview_frames=None):
     L = ep.lines
     choreo(ep, L)
     dur = ep.end or (L[-1]["end"] + 1.2)
-    if dur > MAX_LEN:
-        raise ValueError(f"{ep.title}: {dur:.1f}s is longer than {MAX_LEN}s")
+    if dur > ep.max_len:
+        raise ValueError(f"{ep.title}: {dur:.1f}s is longer than {ep.max_len}s")
     n = int(dur * FPS)
     for c in ep.chars.values():
         c.simulate(FPS, n)

@@ -147,6 +147,11 @@ def footstep(rng, kind="sneaker", strength=1.0, speed=300.0):
     """Heel strike + toe roll on a wooden floor, randomised so no two steps are identical."""
     if kind == "snow":
         return snow_step(rng, strength, speed)
+    if kind == "paw":  # soft padded bear feet
+        t = _t(0.25)
+        y = np.sin(2 * np.pi * np.cumsum(60 + 50 * np.exp(-t * 25)) / SR) * np.exp(-t * 20) * 0.9
+        y += _bp(_noise(len(t), rng), 200, 1500) * np.exp(-t * 50) * 0.25
+        return (y * rng.uniform(0.8, 1.1) * strength).astype(np.float32)
     d = 0.32
     t = _t(d)
     n = len(t)
@@ -337,6 +342,47 @@ def sfx(name, rng):
         k = int(0.12 * SR)
         y2[k:] = y[:-k] * 0.7
         return ((y + y2) * 0.4).astype(np.float32)
+    if name == "car":  # engine growing as it approaches, then a whoosh past
+        d = 1.2
+        t = _t(d)
+        f = 70 + 60 * (t / d) ** 2
+        eng = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * 0.4 + _bp(_noise(len(t), rng), 150, 900) * 0.6
+        env = (t / d) ** 2.2 * np.minimum(1, (d - t) / 0.08)
+        out = _lp(eng, 1500) * env
+        wh = sfx("whoosh", rng)
+        i0 = int((d - 0.35) * SR)
+        out[i0:i0 + len(wh)] += wh[:len(out) - i0] * 1.2
+        return (out / (np.max(np.abs(out)) + 1e-9) * 0.8).astype(np.float32)
+    if name == "honk":
+        t = _t(0.45)
+        y = sum(signal.square(2 * np.pi * f * t, 0.5) for f in (392, 494)) * 0.3
+        y = _lp(y, 2500) * np.minimum(1, t / 0.02) * np.minimum(1, (0.45 - t) / 0.05)
+        return y.astype(np.float32)
+    if name == "clink":  # empty can hitting the ground
+        out = np.zeros(int(0.6 * SR))
+        for k, (dt, g) in enumerate(((0.0, 1.0), (0.18, 0.5), (0.3, 0.25))):
+            tt = _t(0.25)
+            y = sum(np.sin(2 * np.pi * f * tt) * np.exp(-tt * dcy) for f, dcy in ((1800, 30), (3100, 45), (4700, 60)))
+            i0 = int(dt * SR)
+            out[i0:i0 + len(y)] += y * g * 0.4
+        return out.astype(np.float32)
+    if name == "clank":  # bin lid
+        t = _t(0.5)
+        y = sum(np.sin(2 * np.pi * f * t) * np.exp(-t * 9) for f in (310, 523, 811)) * 0.3
+        y += _bp(_noise(len(t), rng), 1000, 6000) * np.exp(-t * 60) * 0.5
+        return y.astype(np.float32)
+    if name == "growl":  # hungry stomach
+        t = _t(0.9)
+        f = 90 + 40 * np.sin(2 * np.pi * 3 * t) + 30 * t
+        y = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * (0.5 + 0.5 * np.sin(2 * np.pi * 9 * t))
+        return (_bp(y, 80, 700) * np.minimum(1, t / 0.1) * np.minimum(1, (0.9 - t) / 0.2) * 0.6).astype(np.float32)
+    if name == "chew":
+        out = np.zeros(int(0.8 * SR))
+        for k in range(4):
+            c = _bp(_noise(int(0.08 * SR), rng), 1500, 6000) * np.exp(-_t(0.08) * 40) * 0.35
+            i0 = int(k * 0.18 * SR)
+            out[i0:i0 + len(c)] += c
+        return out.astype(np.float32)
     raise KeyError(name)
 
 
@@ -508,3 +554,30 @@ def musette(duration, seed=1, bpm=168, key="A"):
     mix[-fade:] *= np.linspace(1, 0, fade)
     mix /= np.max(np.abs(mix)) + 1e-9
     return room_reverb(mix, wet=0.16, decay=0.6).astype(np.float32)
+
+
+def ambience(kind, duration, seed=1):
+    """Quiet background atmosphere (no music): city traffic, forest birds, park birds."""
+    rng = np.random.default_rng(seed + 900)
+    n = int(duration * SR)
+    t = np.arange(n) / SR
+    out = np.zeros(n)
+    if kind == "city":
+        out += _lp(_noise(n, rng), 400) * 0.25 * (0.8 + 0.2 * np.sin(2 * np.pi * 0.2 * t))
+        out += _bp(_noise(n, rng), 800, 3000) * 0.03
+    else:
+        out += _bp(_noise(n, rng), 300, 2500) * (0.05 if kind == "forest" else 0.035) * (0.7 + 0.3 * np.sin(2 * np.pi * 0.15 * t))
+        n_birds = int(duration * (1.4 if kind == "forest" else 1.0))
+        for _ in range(n_birds):
+            t0 = rng.uniform(0, duration - 0.6)
+            base = rng.uniform(2500, 4200)
+            for k in range(int(rng.integers(2, 5))):
+                tt = _t(rng.uniform(0.06, 0.12))
+                f = base * (1 + 0.25 * np.sin(np.pi * tt / tt[-1])) * rng.uniform(0.9, 1.1)
+                chirp = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.sin(np.pi * tt / tt[-1]) * rng.uniform(0.04, 0.09)
+                i0 = int((t0 + k * 0.13) * SR)
+                out[i0:i0 + len(chirp)] += chirp[:max(0, n - i0)]
+    fade = int(0.3 * SR)
+    out[:fade] *= np.linspace(0, 1, fade)
+    out[-fade:] *= np.linspace(1, 0, fade)
+    return out.astype(np.float32)
