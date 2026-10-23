@@ -352,21 +352,22 @@ def grain_frames(n=6, seed=21):
 class Post:
     """Per-frame finishing pass for the euro look."""
 
-    def __init__(self):
+    def __init__(self, grade=(0.98, 0.78, 0.52, 0.22), paper=0.85, grain=0.09):
         self.paper = paper_texture()
         self.grain = grain_frames()
+        self.grade, self.paper_a, self.grain_a = grade, paper, grain
 
     def apply(self, ctx, fi):
         ctx.save()
         ctx.set_operator(cairo.OPERATOR_MULTIPLY)
         ctx.set_source_surface(self.paper, 0, 0)
-        ctx.paint_with_alpha(0.85)
+        ctx.paint_with_alpha(self.paper_a)
         ctx.set_operator(cairo.OPERATOR_SOFT_LIGHT)
-        ctx.set_source_rgba(0.98, 0.78, 0.52, 0.22)  # warm grade
+        ctx.set_source_rgba(*self.grade)  # colour grade (warm for Paris, lavender for the palace)
         ctx.paint()
         ctx.set_operator(cairo.OPERATOR_OVERLAY)
         ctx.set_source_surface(self.grain[(fi // 2) % len(self.grain)], 0, 0)
-        ctx.paint_with_alpha(0.09)
+        ctx.paint_with_alpha(self.grain_a)
         ctx.restore()
 
 

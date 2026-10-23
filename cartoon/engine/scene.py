@@ -18,6 +18,10 @@ THEMES = {
                  banner=(0.94, 0.28, 0.44), banner_text=(1, 1, 1), card=(1, 1, 1), card_text=(0.17, 0.16, 0.27),
                  head=(0.02, 0.84, 0.63), ok=(0.02, 0.75, 0.55), bad=(0.94, 0.28, 0.44), upper=True, size=64,
                  cap_y=480, hook_y=190, follow="FOLLOW STRETCH & BRUNO!"),
+    "storybook": dict(font="DejaVu Serif", text=(1.0, 0.97, 0.9), hi=(1.0, 0.8, 0.3), stroke=(0.18, 0.07, 0.22),
+                      banner=(0.36, 0.16, 0.43), banner_text=(1.0, 0.95, 0.82), card=(0.98, 0.94, 0.86),
+                      card_text=(0.22, 0.1, 0.26), head=(0.36, 0.16, 0.43), ok=(0.3, 0.55, 0.35), bad=(0.7, 0.2, 0.2),
+                      upper=False, size=66, cap_y=1420, hook_y=230, follow="Follow for the next scheme!", follow_y=420),
     "euro": dict(font="DejaVu Serif", text=(0.98, 0.94, 0.84), hi=(1.0, 0.76, 0.34), stroke=(0.15, 0.09, 0.06),
                  banner=(0.48, 0.13, 0.11), banner_text=(0.98, 0.94, 0.84), card=(0.95, 0.9, 0.78),
                  card_text=(0.2, 0.13, 0.09), head=(0.22, 0.33, 0.47), ok=(0.3, 0.52, 0.3), bad=(0.68, 0.2, 0.15),
@@ -644,7 +648,7 @@ def follow_card(ctx, t, t0):
         return
     sc = EASE["back"](u)
     ctx.save()
-    ctx.translate(W / 2, 1450)
+    ctx.translate(W / 2, THEME.get("follow_y", 1450))
     ctx.scale(sc, sc)
     s = THEME["follow"]
     set_font(ctx, 46)

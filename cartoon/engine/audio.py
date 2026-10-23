@@ -383,6 +383,40 @@ def sfx(name, rng):
             i0 = int(k * 0.18 * SR)
             out[i0:i0 + len(c)] += c
         return out.astype(np.float32)
+    if name == "shatter":  # glass breaking into pieces
+        t = _t(1.0)
+        y = _hp(_noise(len(t), rng), 2500) * np.exp(-t * 12) * 0.5
+        for _ in range(26):
+            t0 = rng.uniform(0, 0.6) ** 1.5
+            tt = _t(0.12)
+            f = rng.uniform(3000, 9000)
+            tink = np.sin(2 * np.pi * f * tt) * np.exp(-tt * rng.uniform(40, 90)) * rng.uniform(0.1, 0.35)
+            i0 = int(t0 * SR)
+            y[i0:i0 + len(tink)] += tink[:len(y) - i0]
+        return y.astype(np.float32)
+    if name == "magic":  # rising twinkly glissando
+        out = np.zeros(int(1.2 * SR))
+        for i in range(14):
+            f = 900 * 2 ** (i / 7)
+            tt = _t(0.5)
+            tone = (np.sin(2 * np.pi * f * tt) + 0.3 * np.sin(2 * np.pi * 2.76 * f * tt)) * np.exp(-tt * 7) * 0.12
+            i0 = int(i * 0.045 * SR)
+            out[i0:i0 + len(tone)] += tone[:len(out) - i0]
+        return out.astype(np.float32)
+    if name == "poof":
+        t = _t(0.6)
+        y = _lp(_noise(len(t), rng), 900) * np.exp(-t * 7) * 1.4
+        y += np.sin(2 * np.pi * np.cumsum(140 * np.exp(-t * 6) + 50) / SR) * np.exp(-t * 12) * 0.5
+        return (y * 0.7).astype(np.float32)
+    if name == "trumpet":  # royal fanfare call (guards!)
+        out = np.zeros(int(1.1 * SR))
+        for i, (f, d) in enumerate(((523, 0.12), (523, 0.12), (659, 0.12), (784, 0.5))):
+            tt = _t(d)
+            y = sum(signal.sawtooth(2 * np.pi * f * k * tt) / k for k in (1, 2)) * np.minimum(1, tt / 0.02)
+            y = _lp(y, 3000) * np.minimum(1, (d - tt) / 0.03) * 0.25
+            i0 = int(i * 0.15 * SR)
+            out[i0:i0 + len(y)] += y[:len(out) - i0]
+        return out.astype(np.float32)
     raise KeyError(name)
 
 
@@ -581,3 +615,55 @@ def ambience(kind, duration, seed=1):
     out[:fade] *= np.linspace(0, 1, fade)
     out[-fade:] *= np.linspace(1, 0, fade)
     return out.astype(np.float32)
+
+
+def _celesta(freq, dur):
+    t = _t(dur)
+    return (np.sin(2 * np.pi * freq * t) + 0.4 * np.sin(2 * np.pi * 2 * freq * t) * np.exp(-t * 6)
+            + 0.15 * np.sin(2 * np.pi * 3.01 * freq * t) * np.exp(-t * 12)) * np.exp(-t * 3.5) * np.minimum(1, t / 0.003)
+
+
+def villain_music(duration, seed=1, bpm=104):
+    """Original mischievous 'sneaking villain' cue: tiptoe pizzicato, soft bassoon, celesta sparkles."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    root = 50  # D3
+    n = int((duration + 2) * SR)
+    mix = np.zeros(n)
+
+    def add(y, t0, g):
+        i0 = int(t0 * SR)
+        if 0 <= i0 < n:
+            y = y[:n - i0]
+            mix[i0:i0 + len(y)] += g * y
+
+    prog = [(0, [0, 3, 7]), (-4, [0, 4, 7]), (5, [0, 3, 7]), (7, [0, 4, 7])]  # i - VI - iv - V
+    cell = [0, None, 2, None, 1, 0, 2, None]
+    bars = int(duration / (4 * beat)) + 2
+    for b in range(bars):
+        t0 = b * 4 * beat
+        deg, tri = prog[b % 4]
+        chord = [root + deg + iv for iv in tri]
+        for k in (0, 2):  # pizzicato bass
+            add(pluck(midi_hz(chord[0] - 12), beat * 0.8, rng, bright=0.3, decay=0.99), t0 + k * beat, 0.6)
+        tt = _t(beat * 3.8)  # soft bassoon pad
+        bsn = signal.square(2 * np.pi * midi_hz(chord[0] - 12) * tt, 0.3)
+        add(_lp(bsn, 700) * np.minimum(1, tt / 0.15) * np.minimum(1, (tt[-1] - tt) / 0.3) * 0.25, t0, 0.5)
+        for i, c in enumerate(cell):  # tiptoe staccato plucks
+            if c is None or (b % 4 == 3 and i > 4):
+                continue
+            m = chord[c] + 12 + (1 if (b % 2 and i == 5) else 0)
+            add(pluck(midi_hz(m), beat * 0.35, rng, bright=0.6, decay=0.985), t0 + i * beat / 2, 0.32)
+        if b % 4 == 3:  # sneaky chromatic creep up
+            for i in range(4):
+                add(pluck(midi_hz(chord[0] + 12 + i), beat * 0.3, rng, bright=0.6, decay=0.985), t0 + (2 + i * 0.5) * beat, 0.3)
+        if b % 2 == 1:  # celesta sparkle
+            for i in range(3):
+                add(_celesta(midi_hz(chord[i % 3] + 24 + 12 * (i // 2)), 1.0), t0 + (1.5 + i * 0.25) * beat, 0.12)
+        tk = _t(0.2)
+        add(np.sin(2 * np.pi * np.cumsum(45 + 70 * np.exp(-tk * 30)) / SR) * np.exp(-tk * 16), t0, 0.3)
+    mix = mix[:int(duration * SR)]
+    fade = int(0.8 * SR)
+    mix[-fade:] *= np.linspace(1, 0, fade)
+    mix /= np.max(np.abs(mix)) + 1e-9
+    return room_reverb(mix, wet=0.18, decay=0.8).astype(np.float32)

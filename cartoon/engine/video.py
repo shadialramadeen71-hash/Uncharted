@@ -7,7 +7,7 @@ import wave
 import cairo
 import numpy as np
 
-from . import audio, character, euro, euro_places, flat_places, scene  # noqa: F401 (*_places register backgrounds)
+from . import audio, character, euro, euro_places, flat_places, palace_places, scene  # noqa: F401 (*_places register backgrounds)
 from .anim import Track, clamp
 from .character import Character
 
@@ -18,11 +18,12 @@ BASE_ZOOM, BASE_CY = 1.12, 1040.0
 
 class Episode:
     def __init__(self, title, hook, scene_name, music_seed=1, mood="bouncy", bpm=124, theme="cartoon", floor=None,
-                 max_len=MAX_LEN, ambience=None, hook_end=2.4):
+                 max_len=MAX_LEN, ambience=None, hook_end=2.4, base_zoom=BASE_ZOOM, base_cy=BASE_CY):
         self.title = title
         self.hook = hook  # [(text, color), ...]
         self.hook_end = hook_end
         self.max_len = max_len
+        self.cap_y = None  # override the theme's caption height for one episode
         self.ambience = ambience  # background atmosphere ("city", "forest", "park"); mood=None means no music
         self.scene = scene_name
         self.music_seed, self.mood, self.bpm = music_seed, mood, bpm
@@ -36,7 +37,8 @@ class Episode:
         self.end = None
         self.theme = theme
         self.floor = floor  # e.g. "snow" overrides every character's footstep sound
-        self.cam = {"zoom": Track(BASE_ZOOM), "cx": Track(540.0), "cy": Track(BASE_CY), "shake": Track(0.0)}
+        self.base_zoom, self.base_cy = base_zoom, base_cy
+        self.cam = {"zoom": Track(base_zoom), "cx": Track(540.0), "cy": Track(base_cy), "shake": Track(0.0)}
 
     # authoring -------------------------------------------------------------------
     def cast(self, name, look, voice, x, facing=1, scale=1.0, z=0, label=None, color="#333333"):
@@ -65,9 +67,9 @@ class Episode:
 
     def unpunch(self, t, dur=0.35):
         c = self.cam
-        c["zoom"].to(t, t + dur, BASE_ZOOM)
+        c["zoom"].to(t, t + dur, self.base_zoom)
         c["cx"].to(t, t + dur, 540.0)
-        c["cy"].to(t, t + dur, BASE_CY)
+        c["cy"].to(t, t + dur, self.base_cy)
 
     def shake(self, t, amount=1.0, dur=0.35):
         self.cam["shake"].to(t, t + 0.03, amount, "linear")
@@ -144,6 +146,8 @@ def _mix(ep, dur, path):
     # music with side-chain ducking under dialogue
     if ep.mood is None:
         mus = np.zeros(n)
+    elif ep.mood == "villain":
+        mus = audio.villain_music(dur, ep.music_seed, ep.bpm)
     elif ep.mood == "musette":
         mus = audio.musette(dur, ep.music_seed, ep.bpm)
     else:
@@ -200,6 +204,9 @@ def build(ep, choreo, out_path, preview_frames=None):
     if ep.theme == "euro":
         bg = euro.watercolorize(bg)
         post = euro.Post()
+    elif ep.theme == "storybook":  # fairy-tale palace: same hand-drawn ink, cooler magical grade
+        bg = euro.watercolorize(bg, seed=9)
+        post = euro.Post(grade=(0.86, 0.78, 1.0, 0.16), paper=0.6, grain=0.06)
     surf = cairo.ImageSurface(cairo.FORMAT_ARGB32, scene.W, scene.H)
     ctx = cairo.Context(surf)
 
@@ -240,7 +247,7 @@ def build(ep, choreo, out_path, preview_frames=None):
         ln = _active_line(ep, t)
         tip_on = ep.tip and t >= ep.tip["t0"]
         if ln:
-            scene.captions(ctx, ln, t, y=1270 if tip_on else scene.THEME["cap_y"])
+            scene.captions(ctx, ln, t, y=1270 if tip_on else (ep.cap_y or scene.THEME["cap_y"]))
         if tip_on:
             scene.tip_card(ctx, t, ep.tip)
         for fn in ep.layers["ui"]:

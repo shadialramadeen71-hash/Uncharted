@@ -35,8 +35,8 @@ STYLE = dict(wobble=0.0, k=0, ow_k=1.0)
 
 
 def set_style(name):
-    if name == "euro":
-        OUTLINE.c = (0.17, 0.11, 0.08)
+    if name in ("euro", "storybook"):
+        OUTLINE.c = (0.17, 0.11, 0.08) if name == "euro" else (0.16, 0.09, 0.18)
         STYLE.update(wobble=1.7, ow_k=0.72)
     elif name == "flat":  # outline-free flat pastel look; only facial lines stay drawn
         OUTLINE.c = (0.17, 0.16, 0.27)
@@ -268,6 +268,7 @@ EXPR = {
     "smug": dict(lift=4, inner=-5, lid=0.45, mouth="smirk", pupil=1.0),
     "relieved": dict(lift=5, inner=7, lid=1.0, mouth="smile", pupil=1.0, arcs=True),
     "silly": dict(lift=10, inner=0, lid=0.05, mouth="grin", pupil=1.15),
+    "evil": dict(lift=-2, inner=-16, lid=0.32, mouth="grin", pupil=0.8),
 }
 
 
@@ -560,11 +561,15 @@ class Character:
 
         dark = 0.84
         skin = L["skin"]
+        if L.get("tail"):
+            self._draw_tail(ctx, hip, t, w)
         # back arm (behind everything)
         ctx.save()
         ctx.translate(*hip)
         ctx.rotate(rad(lean))
         ctx.translate(-hip[0], -hip[1])
+        if L.get("cape"):
+            self._draw_cape(ctx, hip, t, w, lean)
         self._draw_arm(ctx, shB, elbB, wrB, foreB, tr["handB"].at(t), dark)
         ctx.restore()
         # legs
@@ -576,6 +581,14 @@ class Character:
         ctx.rotate(rad(lean))
         ctx.translate(-hip[0], -hip[1])
         self._draw_torso(ctx, hip, breathe)
+        if L.get("cape"):  # tall villain collar standing up behind the head
+            top = hip[1] - TORSO
+            for d in (-1, 1):  # two stiff wings of the collar
+                ctx.move_to(14 + d * 20, top + 14)
+                ctx.curve_to(14 + d * 90, top - 10, 14 + d * 150, top - 80, 14 + d * 160, top - 150)
+                ctx.curve_to(14 + d * 120, top - 110, 14 + d * 100, top - 40, 14 + d * 80, top + 30)
+                ctx.close_path()
+                fill_stroke(ctx, L.get("cape_in", (0.6, 0.1, 0.2)))
         ctx.save()
         ctx.translate(*neck)
         ctx.rotate(rad(-tilt))
@@ -643,7 +656,7 @@ class Character:
         if L.get("paw"):
             draw_paw(ctx, wr, fore, skin)
         else:
-            draw_hand(ctx, wr, fore, hand, skin)
+            draw_hand(ctx, wr, fore, hand, shade(L["glove"], k) if L.get("glove") else skin)
 
     def _draw_torso(self, ctx, hip, breathe):
         L = self.look
@@ -692,6 +705,49 @@ class Character:
         ctx.move_to(-48 * bw, hy - 36)
         ctx.line_to(84 * bw, hy - 36)
         ink(ctx, shade(c, 0.6), 3)
+
+    def _draw_cape(self, ctx, hip, t, w, lean):
+        """Long cloak from the shoulders to the ankles; it trails and flutters when walking."""
+        L = self.look
+        top = hip[1] - TORSO + 8
+        bottom = -36
+        trail = -70 * w - 10
+        fl = 10 * math.sin(t * 3.1) + 18 * w * math.sin(t * 9)
+        for col, dx, k in ((L.get("cape_in", (0.6, 0.1, 0.2)), 14, 1.0), (L["cape"], 0, 1.0)):
+            ctx.move_to(-60 + dx, top)
+            ctx.line_to(70 + dx, top)
+            ctx.curve_to(110 + dx, top + 200, 120 + trail * 0.4 + dx, bottom - 200, 104 + trail * 0.5 + fl + dx, bottom)
+            ctx.curve_to(40 + trail, bottom + 16 + fl * 0.5, -120 + trail, bottom + 10, -170 + trail + fl, bottom - 6)
+            ctx.curve_to(-140 + trail * 0.6, bottom - 260, -110, top + 160, -60 + dx, top)
+            ctx.close_path()
+            fill_stroke(ctx, col)
+        for k in range(3):  # folds
+            x0 = -90 + k * 50
+            ctx.move_to(x0 + 30, top + 80)
+            ctx.curve_to(x0 + 10, top + 300, x0 + trail * 0.6, bottom - 160, x0 - 30 + trail, bottom - 8)
+        ink(ctx, shade(L["cape"], 0.6), 3)
+
+    def _draw_tail(self, ctx, hip, t, w):
+        """Little devil tail with a spade tip, swishing."""
+        c = self.look["skin"]
+        hx, hy = hip[0] - 50, hip[1] + 10
+        sw = 30 * math.sin(t * 4.2)
+        tip = (hx - 150, hy - 70 + sw)
+        ctx.move_to(hx, hy)
+        ctx.curve_to(hx - 60, hy + 70, hx - 140, hy + 40 + sw * 0.5, *tip)
+        ink(ctx, OUTLINE, 16 + 2 * OW * STYLE["ow_k"])
+        ctx.move_to(hx, hy)
+        ctx.curve_to(hx - 60, hy + 70, hx - 140, hy + 40 + sw * 0.5, *tip)
+        ctx.set_source_rgb(*c)
+        ctx.set_line_width(14)
+        ctx.set_line_cap(1)
+        ctx.stroke()
+        tx, ty = tip
+        ctx.move_to(tx, ty - 30)
+        ctx.curve_to(tx + 26, ty - 10, tx + 20, ty + 14, tx, ty + 6)
+        ctx.curve_to(tx - 20, ty + 14, tx - 26, ty - 10, tx, ty - 30)
+        ctx.close_path()
+        fill_stroke(ctx, shade(c, 0.85))
 
     def _draw_coat(self, ctx, hx, hy, top, bw):
         """Long coat skirt to the knees; its hem follows the knees so it swings when walking."""
@@ -870,12 +926,19 @@ class Character:
                 ellipse(ctx, ex_ + 2, ey_ + 2, 19, 18)
                 ctx.set_source_rgb(*L.get("muzzle", shade(skin, 1.3)))
                 ctx.fill()
-        # ear
-        ellipse(ctx, -96, 16, 19, 27)
-        fill_stroke(ctx, skin)
-        ellipse(ctx, -96, 16, 8, 14)
-        ctx.set_source_rgba(0.5, 0.25, 0.2, 0.3)
-        ctx.fill()
+        if L.get("ears") == "pointy":  # elf / imp ear sweeping back
+            ctx.move_to(-92, -6)
+            ctx.curve_to(-120, -20, -140, -40, -152, -66)
+            ctx.curve_to(-140, -10, -120, 30, -96, 36)
+            ctx.close_path()
+            fill_stroke(ctx, skin)
+        else:
+            # ear
+            ellipse(ctx, -96, 16, 19, 27)
+            fill_stroke(ctx, skin)
+            ellipse(ctx, -96, 16, 8, 14)
+            ctx.set_source_rgba(0.5, 0.25, 0.2, 0.3)
+            ctx.fill()
         # head
         ellipse(ctx, 0, 0, HEAD_RX, HEAD_RY)
         fill_stroke(ctx, skin)
@@ -1005,9 +1068,10 @@ class Character:
             ink(ctx, OUTLINE, 3)
             ctx.new_path()
         elif L.get("nose") == "long":  # long pointed nose
+            nk = L.get("nose_k", 1.0)
             ctx.move_to(nx - 10, ny - 16)
-            ctx.curve_to(nx + 10, ny - 8, nx + 34, ny + 6, nx + 46, ny + 18)
-            ctx.curve_to(nx + 30, ny + 22, nx + 4, ny + 22, nx - 8, ny + 14)
+            ctx.curve_to(nx + 10, ny - 8, nx + 34 * nk, ny + 6, nx + 46 * nk, ny + 18)
+            ctx.curve_to(nx + 30 * nk, ny + 22 + 4 * (nk - 1), nx + 4, ny + 22, nx - 8, ny + 14)
             ctx.close_path()
             fill_stroke(ctx, shade(skin, 0.9), ow=4.5)
             ctx.new_path()
@@ -1065,6 +1129,14 @@ class Character:
             ctx.fill()
             if m > 0.25:
                 ctx.rectangle(mx - mw, my - 12, mw * 2, 10)
+                ctx.set_source_rgb(1, 1, 1)
+                ctx.fill()
+            if L.get("fangs"):
+                for fx_ in (mx - mw * 0.5, mx + mw * 0.5):
+                    ctx.move_to(fx_ - 7, my - 8)
+                    ctx.line_to(fx_ + 7, my - 8)
+                    ctx.line_to(fx_, my + 10)
+                    ctx.close_path()
                 ctx.set_source_rgb(1, 1, 1)
                 ctx.fill()
             ctx.restore()
@@ -1275,5 +1347,44 @@ class Character:
             fill_stroke(ctx, shade(hc_, 0.85))
             ellipse(ctx, -6, -176, 30, 28)
             fill_stroke(ctx, L.get("pompom", (0.95, 0.9, 0.8)))
+            ctx.restore()
+        if L.get("horns"):
+            hcol = L.get("horn_c", (0.95, 0.9, 0.78))
+            for d, bx in ((-1, -46), (1, 44)):
+                ctx.move_to(bx - 20, -100)
+                ctx.curve_to(bx - 14, -150, bx + d * 10, -190, bx + d * 34, -200)
+                ctx.curve_to(bx + d * 6, -170, bx + 18, -140, bx + 22, -104)
+                ctx.close_path()
+                fill_stroke(ctx, hcol, ow=4.5)
+        if L.get("monocle"):
+            ex_, ey_ = f + 40 * L.get("eye_gap", 1.0), -6
+            ctx.arc(ex_, ey_, 30, 0, 2 * math.pi)
+            ink(ctx, (0.85, 0.7, 0.3), 5)
+            ctx.move_to(ex_ + 24, ey_ + 18)
+            ctx.curve_to(ex_ + 50, ey_ + 60, ex_ + 56, ey_ + 110, ex_ + 40, ey_ + 150)
+            ink(ctx, (0.85, 0.7, 0.3), 2.5)
+        if L.get("hat") == "tophat":  # 1888 silk top hat, worn at a jaunty angle
+            ctx.save()
+            ctx.translate(0, -96)
+            ctx.rotate(-0.08)
+            hc_ = L.get("hat_c", (0.12, 0.1, 0.14))
+            scene_rr = [(-84, -6), (84, -6)]
+            ctx.move_to(-76, -4)
+            ctx.line_to(-66, -200)
+            ctx.curve_to(-30, -212, 30, -212, 66, -200)
+            ctx.line_to(76, -4)
+            ctx.close_path()
+            fill_stroke(ctx, hc_)
+            ctx.move_to(-74, -40)
+            ctx.line_to(74, -40)
+            ctx.line_to(75, -8)
+            ctx.line_to(-75, -8)
+            ctx.close_path()
+            fill_stroke(ctx, L.get("hat_band", (0.55, 0.1, 0.2)), ow=3)
+            ellipse(ctx, 0, 0, 120, 20)
+            fill_stroke(ctx, hc_)
+            ctx.move_to(-40, -190)
+            ctx.line_to(-34, -60)
+            ink(ctx, (1, 1, 1), 3)
             ctx.restore()
         ctx.restore()
