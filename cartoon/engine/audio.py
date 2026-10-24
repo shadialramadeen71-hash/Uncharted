@@ -376,6 +376,16 @@ def sfx(name, rng):
         f = 90 + 40 * np.sin(2 * np.pi * 3 * t) + 30 * t
         y = signal.sawtooth(2 * np.pi * np.cumsum(f) / SR) * (0.5 + 0.5 * np.sin(2 * np.pi * 9 * t))
         return (_bp(y, 80, 700) * np.minimum(1, t / 0.1) * np.minimum(1, (0.9 - t) / 0.2) * 0.6).astype(np.float32)
+    if name == "glug":  # drinking gulps
+        out = np.zeros(int(1.0 * SR))
+        for k in range(4):
+            tt = _t(0.16)
+            f = 180 + 120 * np.exp(-tt * 30) + rng.uniform(-20, 20)
+            g = np.sin(2 * np.pi * np.cumsum(f) / SR) * np.exp(-tt * 18) * 0.6
+            g += _bp(_noise(len(tt), rng), 300, 1500) * np.exp(-tt * 30) * 0.2
+            i0 = int(k * 0.22 * SR)
+            out[i0:i0 + len(g)] += g
+        return out.astype(np.float32)
     if name == "chew":
         out = np.zeros(int(0.8 * SR))
         for k in range(4):
@@ -596,7 +606,13 @@ def ambience(kind, duration, seed=1):
     n = int(duration * SR)
     t = np.arange(n) / SR
     out = np.zeros(n)
-    if kind == "city":
+    if kind == "desert":  # hot wind in gusts
+        gust = 0.5 + 0.5 * np.sin(2 * np.pi * 0.13 * t) * np.sin(2 * np.pi * 0.07 * t + 1)
+        out += _bp(_noise(n, rng), 150, 1200) * 0.18 * gust + _hp(_noise(n, rng), 3000) * 0.015 * gust
+    elif kind == "beach":  # rolling waves
+        wave = np.clip(np.sin(2 * np.pi * t / 4.5), 0, 1) ** 2
+        out += _lp(_noise(n, rng), 1200) * 0.12 * (0.3 + wave) + _hp(_noise(n, rng), 2500) * 0.04 * wave
+    elif kind == "city":
         out += _lp(_noise(n, rng), 400) * 0.25 * (0.8 + 0.2 * np.sin(2 * np.pi * 0.2 * t))
         out += _bp(_noise(n, rng), 800, 3000) * 0.03
     else:

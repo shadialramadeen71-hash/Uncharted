@@ -581,7 +581,7 @@ class Character:
         ctx.rotate(rad(lean))
         ctx.translate(-hip[0], -hip[1])
         self._draw_torso(ctx, hip, breathe)
-        if L.get("cape"):  # tall villain collar standing up behind the head
+        if L.get("cape") and L.get("cape_collar", True):  # tall villain collar standing up behind the head
             top = hip[1] - TORSO
             for d in (-1, 1):  # two stiff wings of the collar
                 ctx.move_to(14 + d * 20, top + 14)
@@ -1018,6 +1018,24 @@ class Character:
             ctx.restore()
             ellipse(ctx, exx, eyy, erx, ry)
             ink(ctx, OUTLINE, 5 * STYLE["ow_k"] + 1)
+            if L.get("kohl"):  # kohl: thick dark line hugging the lids, winged at the outer corner
+                outer = -1 if exx < f else 1
+                kc = L.get("kohl_c", (0.08, 0.06, 0.08))
+                ctx.save()
+                ctx.translate(exx, eyy)
+                ctx.scale(erx + 2, ry + 2)
+                ctx.arc(0, 0, 1, math.pi * 1.02, math.pi * 1.98)
+                ctx.restore()
+                ink(ctx, kc, 10)
+                ctx.save()
+                ctx.translate(exx, eyy)
+                ctx.scale(erx + 1, ry + 1)
+                ctx.arc(0, 0, 1, math.pi * 0.08, math.pi * 0.92)
+                ctx.restore()
+                ink(ctx, kc, 6)
+                ctx.move_to(exx + outer * erx, eyy - 2)
+                ctx.line_to(exx + outer * (erx + 18), eyy - 11)
+                ink(ctx, kc, 7)
             if L.get("bags"):
                 ctx.arc(exx, eyy + ry * 0.55, erx * 1.15, 0.2 * math.pi, 0.8 * math.pi)
                 ink(ctx, shade(skin, 0.6), 3)
@@ -1105,6 +1123,22 @@ class Character:
             ellipse(ctx, nx + 2, ny + 22 + 36 * bleed + dp * 80, 6 * bleed, 8 * bleed)
             ctx.set_source_rgba(*red, 1 - dp)
             ctx.fill()
+
+        if L.get("beard"):  # short neat beard along the jaw, with a moustache
+            bc = L["beard"]
+            ctx.move_to(-112, -24)
+            ctx.line_to(-96, -24)
+            ctx.curve_to(-96, 90, -40, 132, f + 20, 132)
+            ctx.curve_to(f + 70, 132, f + 100, 90, f + 96, 40)
+            ctx.curve_to(f + 80, 70, f + 60, 100, f + 18, 104)
+            ctx.curve_to(-20, 104, -60, 80, -76, 10)
+            ctx.line_to(-80, -24)
+            ctx.curve_to(-100, 40, -112, 30, -112, -24)
+            ctx.close_path()
+            fill_stroke(ctx, bc, ow=4)
+            ctx.move_to(f - 8, 58)
+            ctx.curve_to(f + 10, 50, f + 30, 50, f + 48, 58)
+            ink(ctx, bc, 9)
 
         # mouth
         m, wv = self.mouth(t)
