@@ -2,7 +2,7 @@
 and Puff, a polar bear cub who is NOT built for the heat."""
 
 FARIS = dict(
-    look=dict(skin="#d9a27c", hair="#1b1416", brow="#1b1416", brow_w=10, beard="#1b1416", kohl=True,
+    look=dict(skin="#d9a27c", hair="#1b1416", brow="#1b1416", brow_w=10, kohl=True,
               top="#2c5aa0", top2="#244a85", coat=370, cape="#1f3f78", cape_in="#d9b24a", cape_collar=False,
               pants="#2c5aa0", shoe="#8a5a3a", sole=None, hairstyle="slick", eye_s=0.8, iris="#3a2416",
               leg_k=1.3, neck_len=14, body_w=0.86, head_s=0.95, sleeve="long", stride=1.0, mouth_dy=10,
