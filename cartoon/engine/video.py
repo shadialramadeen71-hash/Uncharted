@@ -7,7 +7,7 @@ import wave
 import cairo
 import numpy as np
 
-from . import audio, character, euro, euro_places, flat_places, palace_places, scene, sunny_places  # noqa: F401 (*_places register backgrounds)
+from . import audio, character, euro, euro_places, flat_places, noir_places, palace_places, scene, sunny_places  # noqa: F401 (*_places register backgrounds)
 from .anim import Track, clamp
 from .character import Character
 
@@ -146,6 +146,8 @@ def _mix(ep, dur, path):
     # music with side-chain ducking under dialogue
     if ep.mood is None:
         mus = np.zeros(n)
+    elif ep.mood == "noir":
+        mus = audio.noir_music(dur, ep.music_seed, ep.bpm)
     elif ep.mood == "villain":
         mus = audio.villain_music(dur, ep.music_seed, ep.bpm)
     elif ep.mood == "musette":
@@ -204,6 +206,8 @@ def build(ep, choreo, out_path, preview_frames=None):
     if ep.theme == "euro":
         bg = euro.watercolorize(bg)
         post = euro.Post()
+    elif ep.theme == "noir":  # 90s action cartoon: no paper, a little film grain and a red night grade
+        post = euro.Post(grade=(1.0, 0.5, 0.42, 0.12), paper=0.0, grain=0.08)
     elif ep.theme == "storybook":  # fairy-tale palace: same hand-drawn ink, cooler magical grade
         bg = euro.watercolorize(bg, seed=9)
         post = euro.Post(grade=(0.86, 0.78, 1.0, 0.16), paper=0.6, grain=0.06)

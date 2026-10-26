@@ -683,3 +683,53 @@ def villain_music(duration, seed=1, bpm=104):
     mix[-fade:] *= np.linspace(1, 0, fade)
     mix /= np.max(np.abs(mix)) + 1e-9
     return room_reverb(mix, wet=0.18, decay=0.8).astype(np.float32)
+
+
+def _brass(freq, dur, bright=0.5):
+    t = _t(dur)
+    y = signal.sawtooth(2 * np.pi * freq * t) + 0.5 * signal.sawtooth(2 * np.pi * freq * 1.003 * t)
+    y = _lp(y, 600 + 2200 * bright)
+    return y * np.minimum(1, t / 0.04) * np.minimum(1, (dur - t) / 0.06)
+
+
+def noir_music(duration, seed=1, bpm=132):
+    """Original dark action cue: low brass ostinato, string tremolo, timpani, a heroic horn line."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    root = 38  # D2
+    n = int((duration + 2) * SR)
+    mix = np.zeros(n)
+
+    def add(y, t0, g):
+        i0 = int(t0 * SR)
+        if 0 <= i0 < n:
+            y = y[:n - i0]
+            mix[i0:i0 + len(y)] += g * y
+
+    prog = [(0, [0, 3, 7]), (-4, [0, 4, 7]), (-2, [0, 4, 7]), (-5, [0, 4, 7])]  # i - VI - VII - V
+    ost = [0, 0, 3, 0, 2, 0, -1, 0]
+    horn = [(0, 2), (7, 1), (12, 1), (15, 4)]
+    bars = int(duration / (4 * beat)) + 2
+    for b in range(bars):
+        t0 = b * 4 * beat
+        deg, tri = prog[b % 4]
+        for i, iv in enumerate(ost):  # brass ostinato
+            add(_brass(midi_hz(root + deg + iv), beat * 0.45, 0.35), t0 + i * beat / 2, 0.32)
+        tt = _t(4 * beat)  # string tremolo chord
+        trem = 0.55 + 0.45 * np.sign(np.sin(2 * np.pi * 12 * tt))
+        chord = sum(signal.sawtooth(2 * np.pi * midi_hz(root + 24 + deg + iv) * tt) for iv in tri)
+        add(_lp(chord, 3000) * trem * np.minimum(1, tt / 0.2) * 0.12, t0, 1.0)
+        tk = _t(0.6)  # timpani
+        timp = np.sin(2 * np.pi * np.cumsum(midi_hz(root + deg) * (1 + 0.3 * np.exp(-tk * 20))) / SR) * np.exp(-tk * 5)
+        add(timp + _lp(_noise(len(tk), rng), 300) * np.exp(-tk * 30) * 0.3, t0, 0.55)
+        add(timp * 0.6, t0 + 2.5 * beat, 0.35)
+        if b % 4 == 1:  # heroic horn call
+            tt0 = t0
+            for iv, d in horn:
+                add(_brass(midi_hz(root + 24 + iv), beat * d * 0.95, 0.6), tt0, 0.2)
+                tt0 += beat * d
+    mix = mix[:int(duration * SR)]
+    fade = int(0.8 * SR)
+    mix[-fade:] *= np.linspace(1, 0, fade)
+    mix /= np.max(np.abs(mix)) + 1e-9
+    return room_reverb(mix, wet=0.2, decay=0.9).astype(np.float32)

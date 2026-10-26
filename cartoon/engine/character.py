@@ -31,13 +31,17 @@ class _Ink:
 OUTLINE = _Ink((0.16, 0.12, 0.19))
 OW = 6.0  # outline width
 # wobble > 0 gives hand-drawn ink: lines jitter around the fills and "boil" every few frames
-STYLE = dict(wobble=0.0, k=0, ow_k=1.0)
+STYLE = dict(wobble=0.0, k=0, ow_k=1.0, shade_a=0.13)
 
 
 def set_style(name):
+    STYLE["shade_a"] = 0.13
     if name in ("euro", "storybook"):
         OUTLINE.c = (0.17, 0.11, 0.08) if name == "euro" else (0.16, 0.09, 0.18)
         STYLE.update(wobble=1.7, ow_k=0.72)
+    elif name == "noir":  # 90s dark-deco action cartoon: crisp black lines, heavy black shadows
+        OUTLINE.c = (0.02, 0.02, 0.04)
+        STYLE.update(wobble=0.0, ow_k=0.85, shade_a=0.42)
     elif name == "flat":  # outline-free flat pastel look; only facial lines stay drawn
         OUTLINE.c = (0.17, 0.16, 0.27)
         STYLE.update(wobble=0.0, ow_k=0.0)
@@ -509,7 +513,7 @@ class Character:
         # torso frame points
         neck = (6.0, hip[1] - TORSO - 6 + breathe * 0.3)
         sh_y = hip[1] - TORSO + 24 + breathe * 0.3
-        shF, shB = (12.0 * bw, sh_y), (-14.0 * bw, sh_y)
+        shF, shB = (L.get("sh_f", 12.0) * bw, sh_y), (L.get("sh_b", -14.0) * bw, sh_y)
         nl = L.get("neck_len", 0)
         hc = (neck[0] + 4, neck[1] - 110 * hs - nl)
         head_c = rot(hc, neck, -tilt)
@@ -555,6 +559,7 @@ class Character:
         ctx.fill()
         ctx.restore()
 
+        self._face = face
         ctx.translate(X, ground_y + Y)
         ctx.rotate(st["rot"])
         ctx.scale(face * s * sqx, s * sqy)
@@ -828,7 +833,7 @@ class Character:
         ctx.move_to(-100, top - 10)
         ctx.curve_to(-40, top + 60, -46, hy - 40, -100, hy + 40)
         ctx.close_path()
-        ctx.set_source_rgba(0, 0, 0, 0.13)
+        ctx.set_source_rgba(0, 0, 0, STYLE["shade_a"])
         ctx.fill()
         if L.get("belly_patch"):
             ellipse(ctx, 26, hy - 86, 66, 84)
@@ -844,6 +849,50 @@ class Character:
                 ctx.move_to(x0, y0)
                 ctx.curve_to(x1, y1, x1, y1, x2, y2)  # fabric creases
             ink(ctx, shade(L["top"], 0.55), 2.4)
+        if L.get("emblem") == "bat":  # black bat on the chest
+            ex0, ey0 = 14, top + 70
+            pts = [(-60, 0), (-30, -14), (-14, -8), (-10, -22), (-4, -12), (4, -12), (10, -22), (14, -8), (30, -14),
+                   (60, 0), (40, 6), (30, 22), (14, 12), (0, 26), (-14, 12), (-30, 22), (-40, 6)]
+            ctx.move_to(ex0 + pts[0][0], ey0 + pts[0][1])
+            for px, py in pts[1:]:
+                ctx.line_to(ex0 + px, ey0 + py)
+            ctx.close_path()
+            ctx.set_source_rgb(0.03, 0.03, 0.05)
+            ctx.fill()
+        elif L.get("emblem") == "S":  # diamond shield
+            ex0, ey0 = 14, top + 74
+            ctx.move_to(ex0 - 52, ey0 - 30)
+            ctx.line_to(ex0 + 52, ey0 - 30)
+            ctx.line_to(ex0 + 64, ey0 - 12)
+            ctx.line_to(ex0, ey0 + 52)
+            ctx.line_to(ex0 - 64, ey0 - 12)
+            ctx.close_path()
+            ctx.set_source_rgb(0.85, 0.12, 0.12)
+            ctx.fill_preserve()
+            ctx.set_source_rgb(0.02, 0.02, 0.04)
+            ctx.set_line_width(4)
+            ctx.stroke()
+            ctx.select_font_face("DejaVu Serif", 0, 1)
+            ctx.set_font_size(56)
+            ext = ctx.text_extents("S")
+            ctx.save()
+            if getattr(self, "_face", 1) < 0:  # letters must never read mirrored
+                ctx.translate(ex0, 0)
+                ctx.scale(-1, 1)
+                ctx.translate(-ex0, 0)
+            ctx.move_to(ex0 - ext.x_advance / 2, ey0 + 16)
+            ctx.text_path("S")
+            ctx.restore()
+            ctx.set_source_rgb(1.0, 0.82, 0.1)
+            ctx.fill()
+        if L.get("belt"):
+            ctx.rectangle(-100, hy - 46, 200, 24)
+            ctx.set_source_rgb(*L["belt"])
+            ctx.fill()
+            ctx.rectangle(-100, hy - 46, 200, 24)
+            ctx.set_source_rgb(0.02, 0.02, 0.04)
+            ctx.set_line_width(3)
+            ctx.stroke()
         if L.get("shirt_v"):  # open vest / jacket showing the shirt
             ctx.move_to(-14, top - 2)
             ctx.line_to(44, top - 2)
@@ -904,6 +953,14 @@ class Character:
             ctx.curve_to(0, 40, 40, -150, -HEAD_RX - 16, -20)
             ctx.close_path()
             fill_stroke(ctx, hair)
+        if L.get("jaw"):  # big square superhero jaw
+            ctx.move_to(-96, 0)
+            ctx.line_to(FX + 96, -6)
+            ctx.line_to(FX + 86, 96)
+            ctx.curve_to(FX + 70, 132, FX + 20, 140, -20, 132)
+            ctx.curve_to(-70, 120, -92, 90, -96, 0)
+            ctx.close_path()
+            fill_stroke(ctx, skin)
         if L.get("jowls"):
             for jx, jy, jr in ((-48, 78, 52), (54, 84, 50)):
                 ellipse(ctx, jx, jy, jr, jr * 0.8)
@@ -926,7 +983,9 @@ class Character:
                 ellipse(ctx, ex_ + 2, ey_ + 2, 19, 18)
                 ctx.set_source_rgb(*L.get("muzzle", shade(skin, 1.3)))
                 ctx.fill()
-        if L.get("ears") == "pointy":  # elf / imp ear sweeping back
+        if L.get("ears") == "none":
+            pass
+        elif L.get("ears") == "pointy":  # elf / imp ear sweeping back
             ctx.move_to(-92, -6)
             ctx.curve_to(-120, -20, -140, -40, -152, -66)
             ctx.curve_to(-140, -10, -120, 30, -96, 36)
@@ -947,7 +1006,7 @@ class Character:
         ellipse(ctx, 0, 0, HEAD_RX - 3, HEAD_RY - 3)
         ctx.clip()
         ellipse(ctx, -150, 30, 80, 150)
-        ctx.set_source_rgba(0, 0, 0, 0.08)
+        ctx.set_source_rgba(0, 0, 0, STYLE["shade_a"] * 0.6)
         ctx.fill()
         if STYLE["wobble"]:  # pen hatching on the shadow side, Franco-Belgian style
             ellipse(ctx, -150, 40, 98, 150)
@@ -976,6 +1035,15 @@ class Character:
         es, gap = L.get("eye_s", 1.0), L.get("eye_gap", 1.0)
         eyes = [(f - 30 * gap, -6, 21 * es), (f + 40 * gap, -6, 23 * es)]
         for (exx, eyy, erx) in eyes:
+            if L.get("eyes") == "slits":
+                continue  # drawn on top of the cowl later
+            if L.get("eyes") == "joker":  # black sclera, tiny white pupils
+                ellipse(ctx, exx, eyy, erx * 0.9, 24 * es)
+                fill_stroke(ctx, (0.04, 0.04, 0.05), ow=4)
+                ellipse(ctx, exx + 4 + look[0] * 6, eyy + look[1] * 6, 5, 5)
+                ctx.set_source_rgb(1, 1, 1)
+                ctx.fill()
+                continue
             if ex.get("squeeze") and lid >= 1:
                 d = 1 if exx < f else -1  # ">" on the left eye, "<" on the right
                 ctx.move_to(exx - 14 * d, eyy - 13)
@@ -1040,7 +1108,7 @@ class Character:
                 ctx.arc(exx, eyy + ry * 0.55, erx * 1.15, 0.2 * math.pi, 0.8 * math.pi)
                 ink(ctx, shade(skin, 0.6), 3)
         # brows
-        for i, (exx, eyy, erx) in enumerate(eyes):
+        for i, (exx, eyy, erx) in enumerate(eyes if not L.get("cowl") else []):
             inner_dir = 1 if i == 0 else -1  # inner end points towards the other eye
             by = eyy - 14 - 28 * es - ex["lift"]
             x_in, x_out = exx + inner_dir * 16, exx - inner_dir * 18
@@ -1141,6 +1209,11 @@ class Character:
             ink(ctx, bc, 9)
 
         # mouth
+        ctx.save()
+        if L.get("mouth_k"):  # extra-wide grin
+            ctx.translate(f + 18, 72 + L.get("mouth_dy", 0))
+            ctx.scale(L["mouth_k"], 1.0)
+            ctx.translate(-(f + 18), -(72 + L.get("mouth_dy", 0)))
         m, wv = self.mouth(t)
         mx, my = f + 18, 72 + L.get("mouth_dy", 0)
         kind = ex["mouth"]
@@ -1233,6 +1306,7 @@ class Character:
                 ctx.set_line_width(3)
                 ctx.stroke()
 
+        ctx.restore()
         if L.get("mustache"):  # curled waiter moustache
             mc = L.get("mustache_c", hair)
             for d in (-1, 1):
@@ -1382,6 +1456,34 @@ class Character:
             ellipse(ctx, -6, -176, 30, 28)
             fill_stroke(ctx, L.get("pompom", (0.95, 0.9, 0.8)))
             ctx.restore()
+        if L.get("cowl"):  # bat cowl: covers the head down to the nose, with ears and white slit eyes
+            cc = L["cowl"]
+            for ex0, tip in ((f + 34, (f + 56, -214)), (-58, (-66, -204))):
+                ctx.move_to(ex0 - 26, -96)
+                ctx.line_to(*tip)
+                ctx.line_to(ex0 + 22, -100)
+                ctx.close_path()
+                fill_stroke(ctx, cc)
+            ctx.move_to(-HEAD_RX - 3, 60)
+            ctx.curve_to(-HEAD_RX - 14, -190, HEAD_RX + 14, -190, HEAD_RX + 3, 20)
+            ctx.line_to(f + 82, 30)
+            ctx.line_to(f + 56, 18)
+            ctx.line_to(f + 20, 40)
+            ctx.curve_to(-20, 46, -60, 60, -86, 96)
+            ctx.close_path()
+            fill_stroke(ctx, cc)
+            for i, (exx, eyy, erx) in enumerate(eyes):
+                d = 1 if i == 0 else -1
+                ctx.move_to(exx - 22, eyy + 2 - (8 if d < 0 else 0))
+                ctx.line_to(exx + 20, eyy - 8 + (8 if d < 0 else 0) - 4)
+                ctx.line_to(exx + 18, eyy + 6)
+                ctx.line_to(exx - 18, eyy + 8)
+                ctx.close_path()
+                fill_stroke(ctx, (1, 1, 1), ow=4)
+        if L.get("forelock"):  # the famous little curl on the forehead
+            ctx.move_to(f + 10, -92)
+            ctx.curve_to(f + 30, -70, f - 10, -56, f + 6, -44)
+            ink(ctx, hair, 9)
         if L.get("horns"):
             hcol = L.get("horn_c", (0.95, 0.9, 0.78))
             for d, bx in ((-1, -46), (1, 44)):
