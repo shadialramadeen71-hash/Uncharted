@@ -386,6 +386,28 @@ def sfx(name, rng):
             i0 = int(k * 0.22 * SR)
             out[i0:i0 + len(g)] += g
         return out.astype(np.float32)
+    if name == "jingle":  # keys
+        out = np.zeros(int(0.7 * SR))
+        for _ in range(10):
+            tt = _t(0.12)
+            f = rng.uniform(3500, 7000)
+            tone = np.sin(2 * np.pi * f * tt) * np.exp(-tt * 40) * rng.uniform(0.1, 0.25)
+            i0 = int(rng.uniform(0, 0.5) * SR)
+            out[i0:i0 + len(tone)] += tone
+        return out.astype(np.float32)
+    if name == "horn":  # party blower
+        t = _t(0.6)
+        y = signal.sawtooth(2 * np.pi * np.cumsum(420 + 60 * np.sin(2 * np.pi * 6 * t)) / SR)
+        return (_bp(y, 400, 3000) * np.minimum(1, t / 0.03) * np.minimum(1, (0.6 - t) / 0.1) * 0.4).astype(np.float32)
+    if name == "freeze":
+        t = _t(1.0)
+        y = _hp(_noise(len(t), rng), 4000) * np.exp(-t * 3) * 0.25
+        for k in range(8):
+            tt = _t(0.3)
+            tone = np.sin(2 * np.pi * (2000 + 400 * k) * tt) * np.exp(-tt * 10) * 0.1
+            i0 = int(k * 0.06 * SR)
+            y[i0:i0 + len(tone)] += tone
+        return y.astype(np.float32)
     if name == "chew":
         out = np.zeros(int(0.8 * SR))
         for k in range(4):

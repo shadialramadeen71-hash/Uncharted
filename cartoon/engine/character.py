@@ -368,6 +368,9 @@ class Character:
             x = self.tr["x"].at(t)
             dx = x - x_prev
             x_prev = x
+            if abs(dx) > 90:  # a scene cut teleported us: no walking, no footsteps
+                dx, w = 0.0, 0.0
+            airborne = self.tr["y"].at(t) < -20
             v = abs(dx) / dt
             target = clamp(v / 120.0)
             w += (target - w) * min(1.0, dt * 12)
@@ -375,7 +378,7 @@ class Character:
                       * self.look.get("leg_k", 1.0) * (1 - 0.55 * self.tr["penguin"].at(t)))
             old = phase
             phase += abs(dx) / (2 * stride * self.s)
-            if w > 0.3 and int(old * 2) != int(phase * 2):
+            if w > 0.3 and int(old * 2) != int(phase * 2) and not airborne:
                 self.steps.append(dict(t=t, x=x, speed=v, w=w, foot=int(phase * 2) % 2, who=self.name))
                 moving = True
             elif moving and w < 0.25:  # the last foot settles when we stop

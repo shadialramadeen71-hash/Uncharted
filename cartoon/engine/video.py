@@ -24,6 +24,7 @@ class Episode:
         self.hook_end = hook_end
         self.max_len = max_len
         self.cap_y = None  # override the theme's caption height for one episode
+        self.cuts = []  # [(time, scene_name)]: the story moves to another place
         self.ambience = ambience  # background atmosphere ("city", "forest", "park"); mood=None means no music
         self.scene = scene_name
         self.music_seed, self.mood, self.bpm = music_seed, mood, bpm
@@ -56,6 +57,14 @@ class Episode:
     def draw(self, layer, fn):
         """fn(ctx, t) drawn on 'back' (behind characters), 'front', or 'ui' (screen space)."""
         self.layers[layer].append(fn)
+
+    def cut(self, t, scene_name, wipe=True):
+        """Change location at time t (with a spinning-emblem wipe like the classic hero shows)."""
+        self.cuts.append((t, scene_name, wipe))
+        if wipe:
+            self.sound(t - 0.25, "whoosh", 0.9)
+        for k in ("zoom", "cx", "cy"):
+            self.cam[k].set(t, {"zoom": self.base_zoom, "cx": 540.0, "cy": self.base_cy}[k])
 
     def punch(self, t, zoom=1.25, cx=540, cy=1000, dur=0.25, hold=None):
         c = self.cam
@@ -200,13 +209,18 @@ def build(ep, choreo, out_path, preview_frames=None):
     wav = out_path.rsplit(".", 1)[0] + ".wav"
     _mix(ep, dur, wav)
 
-    if ep.theme == "noir":  # backgrounds are painted: no ink outlines
-        saved = dict(character.STYLE)
-        character.STYLE["ow_k"] = 0.0
-        bg = noir_places.paint_soften(scene.make_background(ep.scene))
-        character.STYLE.update(saved)
-    else:
-        bg = scene.make_background(ep.scene)
+    def make_bg(name):
+        if ep.theme == "noir":  # backgrounds are painted: no ink outlines
+            saved = dict(character.STYLE)
+            character.STYLE["ow_k"] = 0.0
+            b = noir_places.paint_soften(scene.make_background(name))
+            character.STYLE.update(saved)
+            return b
+        return scene.make_background(name)
+
+    bg = make_bg(ep.scene)
+    cut_bgs = {name: make_bg(name) for _, name, _ in ep.cuts}
+    cuts = sorted(ep.cuts)
     vig = scene.vignette()
     post = None
     if ep.theme == "euro":
@@ -239,7 +253,11 @@ def build(ep, choreo, out_path, preview_frames=None):
         ctx.translate(scene.W / 2 + sh * 14 * math.sin(t * 83), scene.H / 2 + sh * 12 * math.cos(t * 67))
         ctx.scale(z, z)
         ctx.translate(-ep.cam["cx"].at(t), -ep.cam["cy"].at(t))
-        ctx.set_source_surface(bg, -200, -200)
+        cur_bg = bg
+        for ct, name, _ in cuts:
+            if t >= ct:
+                cur_bg = cut_bgs[name]
+        ctx.set_source_surface(cur_bg, -200, -200)
         ctx.paint()
         for fn in ep.layers["back"]:
             fn(ctx, t)
@@ -262,6 +280,9 @@ def build(ep, choreo, out_path, preview_frames=None):
             scene.tip_card(ctx, t, ep.tip)
         for fn in ep.layers["ui"]:
             fn(ctx, t)
+        for ct, _, wipe in cuts:
+            if wipe and abs(t - ct) < 0.3:
+                scene.emblem_wipe(ctx, (t - ct + 0.3) / 0.6)
         if ep.follow_at is not None:
             scene.follow_card(ctx, t, ep.follow_at)
         surf.flush()

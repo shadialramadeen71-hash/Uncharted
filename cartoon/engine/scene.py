@@ -660,3 +660,31 @@ def follow_card(ctx, t, t0):
     box(ctx, -tw / 2 - 30, -50, tw + 60, 80, THEME["banner"], 40, ow=7)
     text(ctx, s, 0, 6, 46, THEME["banner_text"], stroke=0)
     ctx.restore()
+
+
+def emblem_wipe(ctx, u):
+    """Spinning emblem that zooms to fill the screen, then away (u: 0 -> 1, cut at 0.5)."""
+    k = 1 - abs(u - 0.5) * 2  # 0 -> 1 -> 0
+    s = 0.1 + 9.0 * k ** 2
+    ctx.save()
+    ctx.translate(W / 2, H / 2)
+    ctx.rotate((u - 0.5) * 6.0)
+    ctx.scale(s, s)
+    ellipse(ctx, 0, 0, 120, 70)
+    ctx.set_source_rgb(0.95, 0.72, 0.18)
+    ctx.fill_preserve()
+    ctx.set_source_rgb(0.02, 0.02, 0.04)
+    ctx.set_line_width(8)
+    ctx.stroke()
+    pts = [(-60, 0), (-30, -14), (-14, -8), (-10, -22), (-4, -12), (4, -12), (10, -22), (14, -8), (30, -14),
+           (60, 0), (40, 6), (30, 22), (14, 12), (0, 26), (-14, 12), (-30, 22), (-40, 6)]
+    ctx.move_to(pts[0][0] * 1.6, pts[0][1] * 1.6)
+    for px, py in pts[1:]:
+        ctx.line_to(px * 1.6, py * 1.6)
+    ctx.close_path()
+    ctx.fill()
+    ctx.restore()
+    if k > 0.85:  # fully covered for a moment: black frame hides the jump
+        ctx.rectangle(0, 0, W, H)
+        ctx.set_source_rgba(0.02, 0.02, 0.04, (k - 0.85) / 0.15)
+        ctx.fill()

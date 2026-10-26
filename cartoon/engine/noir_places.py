@@ -275,7 +275,198 @@ def paint_soften(surf, seed=3):
     return surf
 
 
-scene.BACKGROUNDS.update(gotham_rooftop=gotham_rooftop, funhouse=funhouse, bank_vault=bank_vault, greenhouse=greenhouse)
+MONITOR = (560, 330, 460, 300)  # x, y, w, h of the big Batcave screen
+
+
+def batcave(ctx):
+    g = cairo.LinearGradient(0, -200, 0, 1600)
+    g.add_color_stop_rgb(0, 0.02, 0.03, 0.06)
+    g.add_color_stop_rgb(1, 0.1, 0.14, 0.22)
+    ctx.rectangle(-200, -200, W + 400, 1900)
+    ctx.set_source(g)
+    ctx.fill()
+    rng = np.random.default_rng(8)
+    for _ in range(26):  # rock masses
+        x, y = rng.uniform(-200, W + 200), rng.uniform(-100, 1300)
+        ellipse(ctx, x, y, rng.uniform(80, 220), rng.uniform(60, 160))
+        _fill(ctx, (0.06 + rng.uniform(0, 0.05), 0.08 + rng.uniform(0, 0.05), 0.14 + rng.uniform(0, 0.06)))
+    for x in range(-150, W + 200, 110):  # stalactites
+        h = rng.uniform(80, 260)
+        _poly(ctx, [(x - 30, -200), (x + 30, -200), (x + 4, -60 + h), (x - 4, -60 + h)], (0.05, 0.06, 0.1))
+    # giant computer
+    mx, my, mw, mh = MONITOR
+    _poly(ctx, [(mx - 30, my - 30), (mx + mw + 30, my - 30), (mx + mw + 30, my + mh + 30), (mx - 30, my + mh + 30)],
+          (0.12, 0.13, 0.16))
+    ctx.rectangle(mx, my, mw, mh)
+    _fill(ctx, (0.05, 0.12, 0.2))
+    for k in range(3):
+        ctx.rectangle(mx - 220 + k * 0, my + 40 + k * 90, 150, 70)
+    _fill(ctx, (0.08, 0.2, 0.28))
+    _poly(ctx, [(mx + 60, 1100), (mx + mw - 60, 1100), (mx + mw, 1200), (mx, 1200)], (0.1, 0.11, 0.14))
+    limb(ctx, [(mx + mw / 2, my + mh + 30), (mx + mw / 2, 1100)], 30, (0.1, 0.11, 0.14), ow=0)
+    # the car: long, low, black, with fins
+    cx, cy = 260, 1450
+    ctx.move_to(cx - 260, cy)
+    ctx.curve_to(cx - 260, cy - 80, cx - 120, cy - 120, cx, cy - 120)
+    ctx.curve_to(cx + 120, cy - 120, cx + 200, cy - 70, cx + 300, cy - 50)
+    ctx.line_to(cx + 300, cy)
+    ctx.close_path()
+    _fill(ctx, (0.04, 0.04, 0.06))
+    _poly(ctx, [(cx - 260, cy - 60), (cx - 300, cy - 160), (cx - 180, cy - 90)], (0.04, 0.04, 0.06))
+    ellipse(ctx, cx - 40, cy - 116, 70, 24)
+    _fill(ctx, (0.2, 0.3, 0.45))
+    for wx in (cx - 170, cx + 200):
+        ellipse(ctx, wx, cy, 44, 44)
+        _fill(ctx, (0.02, 0.02, 0.03))
+    ctx.move_to(cx - 200, cy - 100)
+    ctx.curve_to(cx - 60, cy - 128, cx + 120, cy - 118, cx + 280, cy - 52)
+    ctx.set_source_rgb(0.23, 0.35, 0.57)
+    ctx.set_line_width(6)
+    ctx.stroke()
+    for k in range(9):  # bats
+        bat_shape(ctx, rng.uniform(0, W), rng.uniform(80, 600), rng.uniform(0.25, 0.5), (0.02, 0.02, 0.04))
+    ctx.rectangle(-200, GROUND - 40, W + 400, H)
+    _fill(ctx, (0.1, 0.12, 0.16))
+    ctx.rectangle(-200, GROUND - 40, W + 400, 10)
+    _fill(ctx, (0.18, 0.22, 0.3))
+
+
+def gotham_street(ctx):
+    _red_sky(ctx, 1200)
+    _skyline(ctx, 1250, 11, (0.14, 0.04, 0.05), 0.15, 0.85)
+    for x, w in ((-200, 420), (240, 360), (620, 280), (920, 360)):  # near deco facades
+        ctx.rectangle(x, 380, w, 1200)
+        _fill(ctx, (0.08, 0.06, 0.09))
+        wr = np.random.default_rng(x + 1000)
+        for wy in range(440, 1300, 110):
+            for wx in range(x + 40, x + w - 40, 90):
+                if wr.random() < 0.38:
+                    ctx.rectangle(wx, wy, 40, 64)
+        _fill(ctx, (1.0, 0.78, 0.35), 0.75)
+    ctx.rectangle(-200, 1300, W + 400, 300)  # sidewalk
+    _fill(ctx, (0.16, 0.14, 0.17))
+    ctx.rectangle(-200, GROUND - 40, W + 400, H)  # wet street
+    _fill(ctx, (0.08, 0.07, 0.1))
+    for x in range(-150, W + 200, 260):  # reflections
+        ctx.rectangle(x, GROUND + 40, 30, 300)
+        _fill(ctx, (1.0, 0.75, 0.35), 0.12)
+    # street lamp and bus-stop sign
+    limb(ctx, [(140, GROUND - 40), (140, 900)], 16, (0.05, 0.05, 0.07), ow=0)
+    _poly(ctx, [(100, 900), (180, 900), (170, 840), (110, 840)], (1.0, 0.85, 0.5))
+    limb(ctx, [(880, GROUND - 40), (880, 1060)], 12, (0.25, 0.27, 0.3), ow=0)
+    ctx.rectangle(820, 1000, 120, 90)
+    _fill(ctx, (0.2, 0.42, 0.75))
+    scene.text(ctx, "BUS", 880, 1062, 48, (1, 1, 1), stroke=0)
+
+
+scene.BACKGROUNDS.update(gotham_rooftop=gotham_rooftop, funhouse=funhouse, bank_vault=bank_vault, greenhouse=greenhouse,
+                         batcave=batcave, gotham_street=gotham_street)
+
+
+# ------------------------------------------------------------------ more props
+def keys(ctx, x, y, t):
+    swing = math.sin(t * 14) * 0.4
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.rotate(swing)
+    ctx.arc(0, 0, 18, 0, 2 * math.pi)
+    ctx.set_source_rgb(0.8, 0.8, 0.85)
+    ctx.set_line_width(5)
+    ctx.stroke()
+    for k, c in enumerate(((0.9, 0.75, 0.3), (0.75, 0.78, 0.82))):
+        ctx.save()
+        ctx.rotate(0.5 - k)
+        ctx.rectangle(-5, 14, 10, 50)
+        ctx.rectangle(0, 50, 14, 6)
+        ctx.set_source_rgb(*c)
+        ctx.fill()
+        ctx.restore()
+    ctx.restore()
+
+
+def party_hat(ctx, head, face=1):
+    hx, hy = head
+    ctx.save()
+    ctx.translate(hx - 10 * face, hy - 90)
+    ctx.rotate(-0.2 * face)
+    _poly(ctx, [(-40, 0), (40, 0), (0, -120)], (0.95, 0.3, 0.45))
+    for k in range(3):
+        ellipse(ctx, -14 + k * 14, -20 - k * 30, 7, 7)
+        _fill(ctx, (1.0, 0.85, 0.2))
+    ellipse(ctx, 0, -124, 14, 14)
+    _fill(ctx, (0.3, 0.85, 0.5))
+    ctx.restore()
+
+
+def rope_bind(ctx, chest, hip_y=None):
+    cx, cy = chest
+    for k in range(4):
+        ellipse(ctx, cx + 4, cy - 60 + k * 50, 92, 18)
+        ctx.set_source_rgb(0.85, 0.7, 0.45)
+        ctx.set_line_width(10)
+        ctx.stroke()
+
+
+def cake(ctx, x, y, t, s=1.0):
+    ctx.save()
+    ctx.translate(x, y)
+    ctx.scale(s, s)
+    ellipse(ctx, 0, 0, 80, 18)
+    _fill(ctx, (0.9, 0.9, 0.92))
+    ctx.rectangle(-60, -70, 120, 70)
+    _fill(ctx, (0.55, 0.32, 0.22))
+    ctx.rectangle(-60, -76, 120, 18)
+    _fill(ctx, (0.98, 0.9, 0.95))
+    ctx.rectangle(-4, -120, 8, 44)
+    _fill(ctx, (0.4, 0.75, 1.0))
+    ellipse(ctx, 0, -130 + math.sin(t * 20) * 2, 7, 12)
+    _fill(ctx, (1.0, 0.75, 0.2))
+    ctx.restore()
+
+
+def ice_block(ctx, x, y_bottom, w, h, u):
+    if u <= 0:
+        return
+    a = min(1.0, u)
+    ctx.rectangle(x - w / 2, y_bottom - h * a, w, h * a)
+    ctx.set_source_rgba(0.65, 0.88, 1.0, 0.55)
+    ctx.fill_preserve()
+    ctx.set_source_rgba(1, 1, 1, 0.9)
+    ctx.set_line_width(5)
+    ctx.stroke()
+    for k in range(3):
+        ctx.move_to(x - w / 2 + 30 + k * 50, y_bottom - h * a + 30)
+        ctx.line_to(x - w / 2 + 60 + k * 50, y_bottom - h * a + 120)
+        ctx.set_source_rgba(1, 1, 1, 0.7)
+        ctx.set_line_width(6)
+        ctx.stroke()
+
+
+def breath(ctx, x0, y0, x1, y1, u):
+    if not 0 <= u <= 1:
+        return
+    for k in range(6):
+        p = (u * 2 + k / 6) % 1
+        px = x0 + (x1 - x0) * p
+        py = y0 + (y1 - y0) * p + 20 * math.sin(k * 2 + u * 20)
+        ellipse(ctx, px, py, 40 * (0.5 + p), 22 * (0.5 + p))
+        _fill(ctx, (0.85, 0.95, 1.0), 0.6 * (1 - abs(u - 0.5)))
+
+
+def signal_ha(ctx):
+    """The hijacked signal: a grin and HA HA instead of the bat (drawn over the rooftop sky)."""
+    ellipse(ctx, 700, 330, 150, 110)
+    _fill(ctx, (0.75, 1.0, 0.6), 0.85)
+    scene.text(ctx, "HA HA", 700, 352, 64, (0.15, 0.4, 0.1), stroke=0)
+
+
+def monitor_ha(ctx):
+    mx, my, mw, mh = MONITOR
+    ctx.rectangle(mx, my, mw, mh)
+    _fill(ctx, (0.15, 0.05, 0.05))
+    ellipse(ctx, mx + mw / 2, my + mh / 2, 120, 90)
+    _fill(ctx, (0.75, 1.0, 0.6), 0.9)
+    scene.text(ctx, "HA HA", mx + mw / 2, my + mh / 2 + 20, 54, (0.15, 0.4, 0.1), stroke=0)
 
 
 # ------------------------------------------------------------------ props
