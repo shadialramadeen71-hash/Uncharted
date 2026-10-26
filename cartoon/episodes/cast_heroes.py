@@ -1,9 +1,9 @@
 """Fan-made heroes cast in a late-90s dark-deco animated style: Batman, Superman and the Joker."""
 
 BATMAN = dict(
-    look=dict(skin="#e9c2a2", hair="#16161d", cowl="#1a1a22", cape="#1a1a22", cape_in="#2c2c38", cape_collar=False,
-              top="#7d838e", top2="#6a707a", emblem="bat", belt="#d9b23a", pants="#7d838e", shoe="#1a1a22",
-              sole=None, glove="#1a1a22", sleeve="long", hairstyle="none", ears="none", eyes="slits", eye_s=0.8,
+    look=dict(skin="#d7a27c", hair="#0d0f17", cowl="#0d0f17", cowl_hi="#3a5a92", cape="#0d0f17", cape_in="#0d0f17",
+              cape_hi="#3a5a92", cape_collar=False, mantle=True, top="#7a8494", top2="#677080", emblem="bat_oval",
+              belt="#e89b2e", pants="#7a8494", shoe="#0d0f17", sole=None, glove="#0d0f17", sleeve="long", hairstyle="none", ears="none", eyes="slits", eye_s=0.8,
               head_s=0.74, jaw=True, sh_f=60, sh_b=-56, body_w=1.28, leg_k=1.24, neck_w=60, stride=1.05, arm_swing=0.8, mouth_dy=18,
               step="leather"),
     voice=dict(voice="en-US-ChristopherNeural", rate="-2%", pitch="-22Hz"),

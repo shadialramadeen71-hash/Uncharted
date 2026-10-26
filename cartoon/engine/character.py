@@ -36,12 +36,13 @@ STYLE = dict(wobble=0.0, k=0, ow_k=1.0, shade_a=0.13)
 
 def set_style(name):
     STYLE["shade_a"] = 0.13
+    STYLE["shade_c"] = (0.0, 0.0, 0.0)
     if name in ("euro", "storybook"):
         OUTLINE.c = (0.17, 0.11, 0.08) if name == "euro" else (0.16, 0.09, 0.18)
         STYLE.update(wobble=1.7, ow_k=0.72)
     elif name == "noir":  # 90s dark-deco action cartoon: crisp black lines, heavy black shadows
         OUTLINE.c = (0.02, 0.02, 0.04)
-        STYLE.update(wobble=0.0, ow_k=0.85, shade_a=0.42)
+        STYLE.update(wobble=0.0, ow_k=0.62, shade_a=0.5, shade_c=(0.04, 0.06, 0.18))
     elif name == "flat":  # outline-free flat pastel look; only facial lines stay drawn
         OUTLINE.c = (0.17, 0.16, 0.27)
         STYLE.update(wobble=0.0, ow_k=0.0)
@@ -586,6 +587,8 @@ class Character:
         ctx.rotate(rad(lean))
         ctx.translate(-hip[0], -hip[1])
         self._draw_torso(ctx, hip, breathe)
+        if L.get("mantle"):
+            self._draw_mantle(ctx, hip, bw)
         if L.get("cape") and L.get("cape_collar", True):  # tall villain collar standing up behind the head
             top = hip[1] - TORSO
             for d in (-1, 1):  # two stiff wings of the collar
@@ -725,12 +728,48 @@ class Character:
             ctx.curve_to(40 + trail, bottom + 16 + fl * 0.5, -120 + trail, bottom + 10, -170 + trail + fl, bottom - 6)
             ctx.curve_to(-140 + trail * 0.6, bottom - 260, -110, top + 160, -60 + dx, top)
             ctx.close_path()
+            cape_path = ctx.copy_path()
             fill_stroke(ctx, col)
+        if L.get("cape_hi"):  # 90s animation: black cloth lit with blue highlights along the front edge
+            ctx.save()
+            ctx.append_path(cape_path)
+            ctx.clip()
+            ctx.move_to(78, top)
+            ctx.curve_to(108, top + 200, 112 + trail * 0.4, bottom - 200, 92 + trail * 0.5 + fl, bottom)
+            ctx.set_source_rgb(*L["cape_hi"])
+            ctx.set_line_width(34)
+            ctx.stroke()
+            ctx.restore()
         for k in range(3):  # folds
             x0 = -90 + k * 50
             ctx.move_to(x0 + 30, top + 80)
             ctx.curve_to(x0 + 10, top + 300, x0 + trail * 0.6, bottom - 160, x0 - 30 + trail, bottom - 8)
         ink(ctx, shade(L["cape"], 0.6), 3)
+
+    def _draw_mantle(self, ctx, hip, bw):
+        """The cape draped over both shoulders, as in the 90s animated look."""
+        L = self.look
+        top = hip[1] - TORSO
+        ctx.move_to(-104 * bw, top + 150)
+        ctx.curve_to(-110 * bw, top + 40, -70 * bw, top - 8, -10, top - 10)
+        ctx.line_to(40, top - 10)
+        ctx.curve_to(90 * bw, top - 8, 116 * bw, top + 40, 110 * bw, top + 150)
+        ctx.curve_to(96 * bw, top + 110, 80 * bw, top + 40, 52 * bw, top + 30)
+        ctx.line_to(-24 * bw, top + 30)
+        ctx.curve_to(-60 * bw, top + 40, -86 * bw, top + 110, -104 * bw, top + 150)
+        ctx.close_path()
+        path = ctx.copy_path()
+        fill_stroke(ctx, L["cape"])
+        if L.get("cape_hi"):
+            ctx.save()
+            ctx.append_path(path)
+            ctx.clip()
+            ctx.move_to(-10, top + 4)
+            ctx.curve_to(60 * bw, top + 4, 100 * bw, top + 40, 104 * bw, top + 140)
+            ctx.set_source_rgb(*L["cape_hi"])
+            ctx.set_line_width(26)
+            ctx.stroke()
+            ctx.restore()
 
     def _draw_tail(self, ctx, hip, t, w):
         """Little devil tail with a spade tip, swishing."""
@@ -833,7 +872,7 @@ class Character:
         ctx.move_to(-100, top - 10)
         ctx.curve_to(-40, top + 60, -46, hy - 40, -100, hy + 40)
         ctx.close_path()
-        ctx.set_source_rgba(0, 0, 0, STYLE["shade_a"])
+        ctx.set_source_rgba(*STYLE.get("shade_c", (0, 0, 0)), STYLE["shade_a"])
         ctx.fill()
         if L.get("belly_patch"):
             ellipse(ctx, 26, hy - 86, 66, 84)
@@ -849,8 +888,15 @@ class Character:
                 ctx.move_to(x0, y0)
                 ctx.curve_to(x1, y1, x1, y1, x2, y2)  # fabric creases
             ink(ctx, shade(L["top"], 0.55), 2.4)
-        if L.get("emblem") == "bat":  # black bat on the chest
-            ex0, ey0 = 14, top + 70
+        if L.get("emblem") == "bat_oval":  # black bat inside a yellow oval
+            ellipse(ctx, 14, top + 96, 66, 38)
+            ctx.set_source_rgb(0.95, 0.72, 0.18)
+            ctx.fill_preserve()
+            ctx.set_source_rgb(0.02, 0.02, 0.04)
+            ctx.set_line_width(3)
+            ctx.stroke()
+        if L.get("emblem") in ("bat", "bat_oval"):  # black bat on the chest
+            ex0, ey0 = 14, top + (92 if L.get("emblem") == "bat_oval" else 70)
             pts = [(-60, 0), (-30, -14), (-14, -8), (-10, -22), (-4, -12), (4, -12), (10, -22), (14, -8), (30, -14),
                    (60, 0), (40, 6), (30, 22), (14, 12), (0, 26), (-14, 12), (-30, 22), (-40, 6)]
             ctx.move_to(ex0 + pts[0][0], ey0 + pts[0][1])
@@ -1006,7 +1052,7 @@ class Character:
         ellipse(ctx, 0, 0, HEAD_RX - 3, HEAD_RY - 3)
         ctx.clip()
         ellipse(ctx, -150, 30, 80, 150)
-        ctx.set_source_rgba(0, 0, 0, STYLE["shade_a"] * 0.6)
+        ctx.set_source_rgba(*STYLE.get("shade_c", (0, 0, 0)), STYLE["shade_a"] * 0.6)
         ctx.fill()
         if STYLE["wobble"]:  # pen hatching on the shadow side, Franco-Belgian style
             ellipse(ctx, -150, 40, 98, 150)
@@ -1471,7 +1517,22 @@ class Character:
             ctx.line_to(f + 20, 40)
             ctx.curve_to(-20, 46, -60, 60, -86, 96)
             ctx.close_path()
+            cowl_path = ctx.copy_path()
             fill_stroke(ctx, cc)
+            if L.get("cowl_hi"):  # blue sheen across the top-front of the cowl
+                ctx.save()
+                ctx.append_path(cowl_path)
+                ctx.clip()
+                ctx.arc(-30, 40, 165, -math.pi * 0.62, -math.pi * 0.1)
+                ctx.set_source_rgb(*L["cowl_hi"])
+                ctx.set_line_width(30)
+                ctx.stroke()
+                ctx.restore()
+                ctx.move_to(f + 12, -100)
+                ctx.line_to(f + 54, -206)
+                ctx.set_source_rgb(*L["cowl_hi"])
+                ctx.set_line_width(7)
+                ctx.stroke()
             for i, (exx, eyy, erx) in enumerate(eyes):
                 d = 1 if i == 0 else -1
                 ctx.move_to(exx - 22, eyy + 2 - (8 if d < 0 else 0))

@@ -192,7 +192,90 @@ def bank_vault(ctx):
         ctx.fill()
 
 
-scene.BACKGROUNDS.update(gotham_rooftop=gotham_rooftop, funhouse=funhouse, bank_vault=bank_vault)
+def greenhouse(ctx):
+    """Night conservatory, painted in soft blues like the 90s animated backgrounds."""
+    g = cairo.LinearGradient(0, -200, 0, 1500)
+    g.add_color_stop_rgb(0, 0.09, 0.13, 0.24)
+    g.add_color_stop_rgb(1, 0.2, 0.28, 0.42)
+    ctx.rectangle(-200, -200, W + 400, 1800)
+    ctx.set_source(g)
+    ctx.fill()
+    rng = np.random.default_rng(4)
+    for _ in range(18):  # soft painted clouds
+        x, y = rng.uniform(-200, W + 200), rng.uniform(-100, 900)
+        ellipse(ctx, x, y, rng.uniform(120, 300), rng.uniform(40, 90))
+        _fill(ctx, (0.32, 0.4, 0.55), rng.uniform(0.15, 0.35))
+    for x, h in ((-100, 260), (300, 200), (700, 280), (1000, 220)):  # far tree line
+        ellipse(ctx, x, 1250, 260, h)
+        _fill(ctx, (0.12, 0.2, 0.22))
+    # glass house frame: arches and panes
+    frame = (0.08, 0.14, 0.17)
+    for x0 in (-60, 540, 1140):
+        ctx.arc(x0, 1400, 640, math.pi * 1.08, math.pi * 1.5)
+        ctx.set_source_rgb(*frame)
+        ctx.set_line_width(14)
+        ctx.stroke()
+    for x in range(-200, W + 200, 180):
+        ctx.move_to(x, 300)
+        ctx.line_to(x + 40, 1420)
+        ctx.set_source_rgb(*frame)
+        ctx.set_line_width(8)
+        ctx.stroke()
+    ctx.move_to(-200, 1060)
+    ctx.line_to(W + 200, 1040)
+    ctx.set_line_width(12)
+    ctx.stroke()
+    for x in range(-200, W + 200, 180):  # lattice under the rail
+        ctx.move_to(x, 1060)
+        ctx.line_to(x + 90, 1240)
+        ctx.line_to(x + 180, 1060)
+        ctx.set_line_width(5)
+        ctx.stroke()
+    ctx.set_source_rgba(0.6, 0.75, 0.9, 0.06)  # glass sheen
+    ctx.rectangle(-200, 300, W + 400, 1120)
+    ctx.fill()
+    # plants
+    for k in range(9):  # tall leafy plant, left
+        a = -1.3 + k * 0.32
+        ctx.move_to(70, 1500)
+        ctx.curve_to(70 + math.cos(a) * 120, 1500 - 300 - k * 30, 70 + math.cos(a) * 200, 1100 - k * 40, 70 + math.cos(a) * 240, 900 - k * 30)
+        ctx.curve_to(70 + math.cos(a) * 150, 1100 - k * 40, 90, 1300, 70, 1500)
+        _fill(ctx, (0.18 + 0.03 * (k % 3), 0.5 + 0.05 * (k % 2), 0.28))
+    _poly(ctx, [(900, 820), (980, 820), (970, 900), (910, 900)], (0.55, 0.3, 0.2))  # hanging pot
+    limb(ctx, [(940, 300), (940, 820)], 3, (0.08, 0.1, 0.12), ow=0.5)
+    for k in range(7):
+        a = math.pi * (1.1 + 0.8 * k / 6)
+        ctx.move_to(940, 820)
+        ctx.line_to(940 + math.cos(a) * 110, 820 + math.sin(a) * 90)
+        ctx.set_source_rgb(0.2, 0.42, 0.3)
+        ctx.set_line_width(10)
+        ctx.stroke()
+    for x in (300, 820, 1060):
+        ellipse(ctx, x, 1470, 150, 70)
+        _fill(ctx, (0.12, 0.32, 0.22))
+    ctx.rectangle(-200, GROUND - 40, W + 400, H)
+    _fill(ctx, (0.13, 0.16, 0.2))
+    for x in range(-200, W + 200, 160):
+        ctx.rectangle(x, GROUND - 40, 150, 70)
+    _fill(ctx, (0.17, 0.2, 0.25))
+
+
+def paint_soften(surf, seed=3):
+    """Painted-background finish: soft airbrush blur plus gentle brush grain (no hard lines)."""
+    from scipy import ndimage
+    surf.flush()
+    a = np.ndarray((surf.get_height(), surf.get_width(), 4), np.uint8, surf.get_data())
+    img = a[:, :, :3].astype(np.float32)
+    img = ndimage.gaussian_filter(img, (1.6, 1.6, 0))
+    rng = np.random.default_rng(seed)
+    n = ndimage.gaussian_filter(rng.standard_normal(img.shape[:2]), 2.0)
+    img *= (1 + 0.05 * n / (np.abs(n).max() + 1e-6))[..., None]
+    a[:, :, :3] = np.clip(img, 0, 255).astype(np.uint8)
+    surf.mark_dirty()
+    return surf
+
+
+scene.BACKGROUNDS.update(gotham_rooftop=gotham_rooftop, funhouse=funhouse, bank_vault=bank_vault, greenhouse=greenhouse)
 
 
 # ------------------------------------------------------------------ props

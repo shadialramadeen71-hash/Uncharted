@@ -200,7 +200,13 @@ def build(ep, choreo, out_path, preview_frames=None):
     wav = out_path.rsplit(".", 1)[0] + ".wav"
     _mix(ep, dur, wav)
 
-    bg = scene.make_background(ep.scene)
+    if ep.theme == "noir":  # backgrounds are painted: no ink outlines
+        saved = dict(character.STYLE)
+        character.STYLE["ow_k"] = 0.0
+        bg = noir_places.paint_soften(scene.make_background(ep.scene))
+        character.STYLE.update(saved)
+    else:
+        bg = scene.make_background(ep.scene)
     vig = scene.vignette()
     post = None
     if ep.theme == "euro":
