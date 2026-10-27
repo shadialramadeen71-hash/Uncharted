@@ -24,7 +24,7 @@ Every character has a full body built on a pivot hierarchy you can animate:
 2. **NOVA — Episode 2: Falling Star** (18 s). At sunset, a beam snaps 40 floors up. Sam falls, Nova streaks across the sky, catches him in mid-air and sets him down on a rooftop.
 3. **VOLT & NOVA — Episode 3: Iron Titan** (19 s). A giant robot stomps down Main Street. Volt short-circuits its core, Nova knocks it down with a flying punch, and they finish with a high five.
 
-The finished videos are in `videos/` (1920×1080, 24 fps, English subtitles burned in).
+The finished videos are in `videos/` (vertical 1080×1920 for YouTube Shorts, 24 fps, English subtitles burned in).
 
 ## How to build
 

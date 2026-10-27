@@ -16,9 +16,11 @@ args = sys.argv[1:]
 ep = args[0]
 out = os.path.join(ROOT, 'build', ep)
 stills = '--stills' in args
-res = (640, 360) if stills else (960, 540)
+res = (360, 640) if stills else (648, 1152)  # vertical 9:16 for YouTube Shorts
 s = reset_scene(res, samples=10)
 importlib.import_module(ep + '_scene').build(load_lipsync(out))
+for cam in bpy.data.cameras:  # shots were blocked for 16:9; widen the lens so the action fits a 9:16 frame
+    cam.lens *= 0.72
 bpy.ops.wm.save_as_mainfile(filepath=os.path.join(out, ep + '.blend'))
 if '--blend' in args:
     sys.exit(0)

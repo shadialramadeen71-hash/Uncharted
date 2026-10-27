@@ -373,14 +373,15 @@ def build(ep):
     # subtitles (ASS) - speaker name in their colour + white line, title card at start
     head = """[Script Info]
 ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
+PlayResX: 1080
+PlayResY: 1920
+WrapStyle: 0
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Sub,DejaVu Sans,54,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,4,2,2,80,80,70,1
-Style: Title,DejaVu Sans,130,&H0000D7FF,&H000000FF,&H00000000,&H96000000,1,0,0,0,100,100,6,0,1,7,4,8,80,80,120,1
-Style: Subtitle,DejaVu Sans,60,&H00FFFFFF,&H000000FF,&H00000000,&H96000000,1,1,0,0,100,100,2,0,1,4,3,8,80,80,280,1
+Style: Sub,DejaVu Sans,60,&H00FFFFFF,&H000000FF,&H00000000,&H64000000,1,0,0,0,100,100,0,0,1,5,2,2,90,90,430,1
+Style: Title,DejaVu Sans,120,&H0000D7FF,&H000000FF,&H00000000,&H96000000,1,0,0,0,100,100,4,0,1,7,4,8,60,60,230,1
+Style: Subtitle,DejaVu Sans,56,&H00FFFFFF,&H000000FF,&H00000000,&H96000000,1,1,0,0,100,100,2,0,1,4,3,8,60,60,380,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
