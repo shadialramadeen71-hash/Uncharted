@@ -755,3 +755,48 @@ def noir_music(duration, seed=1, bpm=132):
     mix[-fade:] *= np.linspace(1, 0, fade)
     mix /= np.max(np.abs(mix)) + 1e-9
     return room_reverb(mix, wet=0.2, decay=0.9).astype(np.float32)
+
+
+def _epiano(freq, dur):
+    t = _t(dur)
+    y = (np.sin(2 * np.pi * freq * t) + 0.25 * np.sin(2 * np.pi * 2 * freq * t) * np.exp(-t * 4)
+         + 0.08 * np.sin(2 * np.pi * 7 * freq * t) * np.exp(-t * 30))
+    return y * np.exp(-t * 1.6) * np.minimum(1, t / 0.005) * (0.85 + 0.15 * np.sin(2 * np.pi * 5 * t))
+
+
+def muzak(duration, seed=1, bpm=100):
+    """Original 'elevator music': soft bossa e-piano on major-7th chords, brushed shaker, round bass."""
+    rng = np.random.default_rng(seed)
+    beat = 60 / bpm
+    root = 53  # F3
+    n = int((duration + 2) * SR)
+    mix = np.zeros(n)
+
+    def add(y, t0, g):
+        i0 = int(t0 * SR)
+        if 0 <= i0 < n:
+            y = y[:n - i0]
+            mix[i0:i0 + len(y)] += g * y
+
+    prog = [(0, [0, 4, 7, 11]), (2, [0, 3, 7, 10]), (5, [0, 4, 7, 11]), (7, [0, 4, 7, 10])]
+    bars = int(duration / (4 * beat)) + 2
+    for b in range(bars):
+        t0 = b * 4 * beat
+        deg, ch = prog[b % 4]
+        for off in (0, 1.5, 2.5):  # bossa comping
+            for iv in ch:
+                add(_epiano(midi_hz(root + deg + iv), beat * 1.2), t0 + off * beat, 0.08)
+        for off, iv in ((0, 0), (1.5, 7), (2, 0), (3.5, 7)):
+            tt = _t(beat * 0.8)
+            add(np.sin(2 * np.pi * midi_hz(root - 12 + deg + iv) * tt) * np.exp(-tt * 3), t0 + off * beat, 0.35)
+        for k in range(8):
+            sh = _bp(_noise(int(0.06 * SR), rng), 4000, 9000) * np.exp(-_t(0.06) * 60)
+            add(sh, t0 + k * beat / 2, 0.05 if k % 2 else 0.03)
+        if b % 2 == 1:
+            for i, iv in enumerate((11, 7, 4, 2)):
+                add(_epiano(midi_hz(root + 12 + deg + iv), beat), t0 + i * beat, 0.07)
+    mix = mix[:int(duration * SR)]
+    fade = int(0.6 * SR)
+    mix[-fade:] *= np.linspace(1, 0, fade)
+    mix /= np.max(np.abs(mix)) + 1e-9
+    return room_reverb(mix, wet=0.12).astype(np.float32)

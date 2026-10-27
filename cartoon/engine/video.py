@@ -155,6 +155,8 @@ def _mix(ep, dur, path):
     # music with side-chain ducking under dialogue
     if ep.mood is None:
         mus = np.zeros(n)
+    elif ep.mood == "muzak":
+        mus = audio.muzak(dur, ep.music_seed, ep.bpm)
     elif ep.mood == "noir":
         mus = audio.noir_music(dur, ep.music_seed, ep.bpm)
     elif ep.mood == "villain":
