@@ -89,6 +89,7 @@ def build3d(ep, n):
     looks = {k: T.Toon(k, T.LOOKS[k]) for k in ("joker", "batman", "superman")}
     for k, toon in looks.items():
         toon.animate(ep.chars[k], n)
+    T.add_outlines([o for o in bpy.data.objects if o.type == "MESH" and not o.name.startswith(("tower", "road", "sidewalk", "dash", "floor", "back", "side", "panel", "bpanel", "ceiling", "whirl", "spark"))])
     # the Joker's spin + his hair turning pink
     j = looks["joker"]
     for fi in range(n):

@@ -35,10 +35,10 @@ def use_engine(sc, engine):
         sc.cycles.max_bounces = 2
     else:
         try:
-            sc.eevee.taa_render_samples = 4
+            sc.eevee.taa_render_samples = 3
         except AttributeError:
             pass
-    sc.render.use_freestyle = True
+    sc.render.use_freestyle = False  # Freestyle is ~7x slower on CPU; we use inverted-hull outlines instead
     sc.render.line_thickness_mode = "ABSOLUTE"
     sc.render.line_thickness = 1.5
     ls = sc.view_layers[0].freestyle_settings.linesets
@@ -411,3 +411,34 @@ def light(kind, loc, energy, color=(1, 1, 1), size=1.0, rot=(0, 0, 0)):
     o.location = loc
     o.rotation_euler = rot
     return o
+
+
+def outline_mat():
+    if "ink_hull" in bpy.data.materials:
+        return bpy.data.materials["ink_hull"]
+    m = bpy.data.materials.new("ink_hull")
+    m.use_nodes = True
+    nt = m.node_tree
+    nt.nodes.clear()
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    e = nt.nodes.new("ShaderNodeEmission")
+    e.inputs["Color"].default_value = (0.01, 0.01, 0.02, 1)
+    nt.links.new(e.outputs[0], out.inputs[0])
+    m.use_backface_culling = True
+    return m
+
+
+def add_outlines(objects, thickness=0.014):
+    """Cartoon ink lines: an inflated, inside-out black copy of each mesh (cheap 'inverted hull')."""
+    ink = outline_mat()
+    for o in objects:
+        if o.type != "MESH" or o.name.startswith("ink"):
+            continue
+        idx = len(o.data.materials)
+        o.data.materials.append(ink)
+        mod = o.modifiers.new("ink", "SOLIDIFY")
+        mod.thickness = thickness
+        mod.offset = 1.0
+        mod.use_flip_normals = True
+        mod.use_rim = False
+        mod.material_offset = idx

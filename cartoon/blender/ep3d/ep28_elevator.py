@@ -81,6 +81,7 @@ def build3d(ep, n):
     looks = {k: T.Toon(k, T.LOOKS[k]) for k in ("batman", "joker", "superman")}
     for k, toon in looks.items():
         toon.animate(ep.chars[k], n)
+    T.add_outlines([o for o in bpy.data.objects if o.type == "MESH" and not o.name.startswith(("tower", "road", "sidewalk", "dash", "floor", "back", "side", "panel", "bpanel", "ceiling", "whirl", "spark"))])
     fps = T.FPS
     stop, rip = int(st["stop"] * fps), int(st["rip"] * fps)
     # lights flicker after the stop, then the roof goes up and moonlight pours in
