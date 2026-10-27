@@ -22,7 +22,7 @@ def window_mat(name, lit=(1.0, 0.75, 0.35), wall=(0.06, 0.04, 0.07), scale=6.0, 
     brick.inputs["Color2"].default_value = (*wall, 1)
     brick.inputs["Mortar"].default_value = (*wall, 1)
     brick.offset = 0.0
-    brick.inputs["Bias"].default_value = -0.6 + seed * 0.05
+    brick.inputs["Bias"].default_value = 0.15 + seed * 0.05
     nt.links.new(brick.outputs["Color"], em.inputs["Color"])
     em.inputs["Strength"].default_value = 1.0
     nt.links.new(em.outputs[0], out.inputs[0])
@@ -59,7 +59,7 @@ def batmobile(loc=(0.6, 1.8, 0)):
     T.box("carhood", (1.6, 1.3, 0.35), (0.9, 0, 0.95), paint, root, bevel=0.15)
     T.sphere("canopy", 0.6, (-0.3, 0, 1.0), T.toon("glass", (0.2, 0.32, 0.5), gloss=True), root, scale=(1.4, 0.9, 0.5))
     for sy in (-0.7, 0.7):
-        T.box(f"fin{sy}", (1.2, 0.08, 0.7), (-1.9, sy, 1.0), paint, root, rot=(0, -0.5, 0))
+        T.box(f"fin{sy}", (0.9, 0.06, 0.35), (-1.8, sy, 0.95), paint, root, rot=(0, 0.35, 0))
     for wx in (-1.4, 1.4):
         for wy in (-0.78, 0.78):
             T.cyl(f"wheel{wx}{wy}", 0.38, 0.3, (wx, wy, 0.38), T.toon("tyre", (0.02, 0.02, 0.02)), root, rot=(math.pi / 2, 0, 0))

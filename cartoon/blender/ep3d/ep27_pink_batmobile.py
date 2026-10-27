@@ -73,7 +73,7 @@ def choreo(ep, L):
     j_.expr(wash_end, "shocked")
     b_.expr(wash_end, "neutral")
     a, e = L[3]["start"], L[3]["end"]
-    s_.pose(a, (40, 120), (30, 120), "fist", "fist", dur=0.2)  # arms crossed, proud
+    s_.pose(a, (18, 105), (12, 105), "fist", "fist", dur=0.2)  # arms folded, proud
     a, e = L[4]["start"], L[4]["end"]
     j_.pose(a, (160, 40), (-160, 40), "open", "open", dur=0.2)
     ep.end = e + 1.0
@@ -119,13 +119,14 @@ def build3d(ep, n):
             sp.scale = (s + 1e-4,) * 3
             sp.keyframe_insert("scale", frame=fi)
     # camera: wide, punch on Batman, back out for the wash
-    cam, tgt = T.camera((0.2, -9.0, 1.7), (0.2, 0.5, 1.35), lens=30)
-    keys = [(0, (0.6, -9.0, 1.8), (0.6, 0.5, 1.4)),
-            (int(ep.lines[1]["start"] * T.FPS) - 2, (0.6, -9.0, 1.8), (0.6, 0.5, 1.4)),
-            (int(ep.lines[1]["start"] * T.FPS) + 6, (-0.9, -4.6, 1.8), (-0.9, 0.0, 1.75)),
-            (int(ep.lines[1]["end"] * T.FPS) + 4, (-0.9, -4.6, 1.8), (-0.9, 0.0, 1.75)),
-            (int(ep.lines[1]["end"] * T.FPS) + 10, (0.3, -9.6, 1.9), (0.3, 0.5, 1.5)),
-            (n - 1, (0.3, -8.6, 1.9), (0.3, 0.5, 1.5))]
+    cam, tgt = T.camera((0.2, -9.0, 1.7), (0.2, 0.5, 1.35), lens=55)
+    l1s, l1e = int(ep.lines[1]["start"] * T.FPS), int(ep.lines[1]["end"] * T.FPS)
+    keys = [(0, (0.9, -9.0, 1.5), (0.9, 0.5, 1.15)),
+            (l1s - 2, (0.4, -9.0, 1.5), (0.4, 0.5, 1.15)),
+            (l1s + 6, (-0.9, -6.0, 1.75), (-0.9, 0.0, 1.7)),
+            (l1e + 4, (-0.9, -6.0, 1.75), (-0.9, 0.0, 1.7)),
+            (l1e + 10, (0.2, -10.5, 1.6), (0.2, 0.5, 1.25)),
+            (n - 1, (0.2, -9.5, 1.6), (0.2, 0.5, 1.25))]
     for fi, loc, look in keys:
         cam.location = loc
         tgt.location = look

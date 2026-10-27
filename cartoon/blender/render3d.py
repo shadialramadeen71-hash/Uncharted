@@ -17,6 +17,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 
+os.environ.setdefault("EGL_PLATFORM", "surfaceless")  # headless Eevee through Mesa
 import bpy  # noqa: E402
 import cairo  # noqa: E402
 
@@ -67,7 +68,7 @@ def run(name, preview=None, engine=None):
     todo = preview if preview is not None else range(n)
     for fi in todo:
         sc.frame_set(fi)
-        sc.render.filepath = os.path.join(frames_dir, f"f_{fi:04d}.png")
+        sc.render.filepath = os.path.abspath(os.path.join(frames_dir, f"f_{fi:04d}.png"))
         bpy.ops.render.render(write_still=True)
         if fi % 30 == 0:
             print(f"  frame {fi}/{n}  {time.time() - t0:.0f}s", flush=True)
@@ -86,9 +87,20 @@ def run(name, preview=None, engine=None):
             scene.follow_card(ctx, t, ep.follow_at)
         surf.flush()
 
+    def load(fi):
+        """3D frames are rendered at half size; upscale to 1080x1920 before drawing crisp captions."""
+        src = cairo.ImageSurface.create_from_png(os.path.join(frames_dir, f"f_{fi:04d}.png"))
+        s = cairo.ImageSurface(cairo.FORMAT_ARGB32, scene.W, scene.H)
+        c = cairo.Context(s)
+        c.scale(scene.W / src.get_width(), scene.H / src.get_height())
+        c.set_source_surface(src, 0, 0)
+        c.get_source().set_filter(cairo.FILTER_BEST)
+        c.paint()
+        return s
+
     if preview is not None:
         for fi in preview:
-            s = cairo.ImageSurface.create_from_png(os.path.join(frames_dir, f"f_{fi:04d}.png"))
+            s = load(fi)
             ui(s, fi)
             s.write_to_png(os.path.join(out_dir, f"{name}_preview_{fi:04d}.png"))
         return
@@ -98,13 +110,7 @@ def run(name, preview=None, engine=None):
         "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "192k", "-af", "loudnorm=I=-14:TP=-1.5:LRA=11",
         "-ar", "48000", "-movflags", "+faststart", "-shortest", out], stdin=subprocess.PIPE)
     for fi in range(n):
-        s = cairo.ImageSurface.create_from_png(os.path.join(frames_dir, f"f_{fi:04d}.png"))
-        if s.get_format() != cairo.FORMAT_ARGB32:
-            s2 = cairo.ImageSurface(cairo.FORMAT_ARGB32, scene.W, scene.H)
-            c2 = cairo.Context(s2)
-            c2.set_source_surface(s, 0, 0)
-            c2.paint()
-            s = s2
+        s = load(fi)
         ui(s, fi)
         proc.stdin.write(s.get_data())
     proc.stdin.close()

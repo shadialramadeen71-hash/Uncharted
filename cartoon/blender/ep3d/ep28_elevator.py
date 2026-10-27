@@ -38,7 +38,7 @@ def choreo(ep, L):
     j_["face"].key(0, -0.3)
     b_.expr(0, "stern")
     j_.expr(0, "evil")
-    b_.pose(0, (40, 120), (30, 120), "fist", "fist", dur=0.01, swing=0)  # arms crossed
+    b_.pose(0, (18, 105), (12, 105), "fist", "fist", dur=0.01, swing=0)  # arms folded
     ep.sound(0.1, "ding", 0.8)
     # awkward silence: the Joker rocks on his heels
     a = L[0]["end"]
@@ -101,7 +101,7 @@ def build3d(ep, n):
     for fi, s in ((0, 0.3), (rip, 0.3), (rip + 10, 1.0)):
         bg.inputs["Strength"].default_value = s
         bg.inputs["Strength"].keyframe_insert("default_value", frame=fi)
-    cam, tgt = T.camera((0.05, -3.4, 1.45), (0.05, 1.0, 1.4), lens=22)
+    cam, tgt = T.camera((0.05, -3.4, 1.45), (0.05, 1.0, 1.4), lens=24)
     keys = [(0, (0.05, -3.4, 1.45), (0.05, 1.0, 1.4)),
             (int(ep.lines[1]["start"] * fps), (0.05, -3.4, 1.45), (0.05, 1.0, 1.4)),
             (int(ep.lines[2]["start"] * fps), (-0.35, -2.2, 1.75), (-0.45, 0.6, 1.75)),

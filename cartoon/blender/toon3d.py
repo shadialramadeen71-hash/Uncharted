@@ -15,7 +15,7 @@ FPS = 30
 
 
 # ------------------------------------------------------------------ scene setup
-def reset(res=(1080, 1920)):
+def reset(res=(540, 960)):
     bpy.ops.wm.read_factory_settings(use_empty=True)
     sc = bpy.context.scene
     sc.render.resolution_x, sc.render.resolution_y = res
@@ -35,18 +35,20 @@ def use_engine(sc, engine):
         sc.cycles.max_bounces = 2
     else:
         try:
-            sc.eevee.taa_render_samples = 16
+            sc.eevee.taa_render_samples = 4
         except AttributeError:
             pass
     sc.render.use_freestyle = True
     sc.render.line_thickness_mode = "ABSOLUTE"
-    sc.render.line_thickness = 2.2
+    sc.render.line_thickness = 1.5
     ls = sc.view_layers[0].freestyle_settings.linesets
     if len(ls) == 0:
         ls.new("lines")
     ls[0].select_by_visibility = True
+    if ls[0].linestyle is None:
+        ls[0].linestyle = bpy.data.linestyles.new("ink")
     ls[0].linestyle.color = (0.02, 0.02, 0.04)
-    ls[0].linestyle.thickness = 2.2
+    ls[0].linestyle.thickness = 1.5
 
 
 def world(color_top=(0.35, 0.05, 0.04), color_bottom=(0.9, 0.35, 0.12), strength=1.0):
@@ -240,7 +242,7 @@ class Toon:
             self.legs.append((hipp, knee))
         # torso
         self.chest = empty(name + "_chest", (0, 0, 0.0), self.body)
-        tor = sphere(name + "_torso", 0.26, (0, 0, 0.33), suit, self.chest, scale=(1.15 * (0.95 if name == "joker" else 1.18), 0.75, 1.35))
+        tor = sphere(name + "_torso", 0.26, (0, 0, 0.33), suit, self.chest, scale=(0.95 if name == "joker" else 1.08, 0.68, 1.38))
         sphere(name + "_pelvis", 0.22, (0, 0, 0.02), suit if not L.get("coat") else dark, self.chest, scale=(1.05, 0.8, 0.6))
         if L.get("belt"):
             cyl(name + "_belt", 0.25, 0.07, (0, 0, 0.1), toon(name + "_beltm", L["belt"]), self.chest)
