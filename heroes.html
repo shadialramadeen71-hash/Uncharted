@@ -958,6 +958,6 @@ requestAnimationFrame(loop);
 if (document.fonts) document.fonts.ready.then(() => render(cur, T));
 
 // hooks for offline video export
-window.__series = { eps: EPS.map(e => ({ title: e.title, dur: e.dur })), frame(i, t) { cur = i; T = t; playing = false; render(i, t); } };
+window.__series = { eps: EPS.map(e => ({ title: e.title, dur: e.dur, lines: e.lines })), frame(i, t) { cur = i; T = t; playing = false; render(i, t); } };
 })();
 </script>
