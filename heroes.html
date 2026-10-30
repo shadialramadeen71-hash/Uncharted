@@ -92,7 +92,7 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
 <div class="wrap" dir="rtl" lang="ar">
   <header>
     <h1 class="logo" lang="en" dir="ltr">STEEL <span class="amp">&amp;</span> SHADOW</h1>
-    <p class="tag">مسلسل رسوم متحركة <b>2D Digital Animation</b> بطولة سوبرمان وباتمان. ٥ حلقات، كل حلقة أقل من ٣٠ ثانية، والحوار بالإنجليزية مع ترجمة على الشاشة.</p>
+    <p class="tag">مسلسل رسوم متحركة <b>2D Digital Animation</b> بأسلوب مسلسلات الكرتون الكوميدية ولقطات قريبة، بطولة سوبرمان وباتمان. ٥ حلقات، كل حلقة أقل من ٣٠ ثانية، والحوار بالإنجليزية مع ترجمة على الشاشة.</p>
   </header>
 
   <div class="stage" dir="ltr">
@@ -131,7 +131,11 @@ footer{color:var(--muted);font-size:12.5px;text-align:center}
 // ───────────────────────── engine basics ─────────────────────────
 const W = 960, H = 540;
 const cv = document.getElementById('screen');
-const ctx = cv.getContext('2d');
+let ctx = cv.getContext('2d');
+const DUMMY = document.createElement('canvas').getContext('2d');
+let DRY = false;
+const HEADS = {};
+let CAMI = new DOMMatrix();
 ctx.direction = 'ltr';
 let K = cv.width / W;
 const INK = '#0a0a12';
@@ -152,10 +156,10 @@ function kf(t, keys) {
   }
   return keys[keys.length - 1][1];
 }
-function world(pt) { const q = ctx.getTransform().transformPoint(new DOMPoint(pt[0], pt[1])); return [q.x / K, q.y / K]; }
+function world(pt) { const q = CAMI.transformPoint(ctx.getTransform().transformPoint(new DOMPoint(pt[0], pt[1]))); return [q.x, q.y]; }
 
 // ───────────────────────── poses ─────────────────────────
-const BASE = { aB: -8, eB: 4, aF: 8, eF: -4, lB: -4, kB: 0, lF: 4, kF: 0, tilt: 0, air: 0, capeLen: 118, wind: 0 };
+const BASE = { aB: -8, eB: 4, aF: 8, eF: -4, lB: -4, kB: 0, lF: 4, kF: 0, tilt: 0, air: 0, capeLen: 112, wind: 0 };
 const mk = o => Object.assign({}, BASE, o);
 const P = {
   stand: mk({}),
@@ -209,7 +213,7 @@ function fillStroke(fill, lw = 3) { ctx.fillStyle = fill; ctx.fill(); ctx.stroke
 
 function drawCape(who, sy, p, t, air) {
   const C = PAL[who];
-  const spread = who === 'B' ? 46 : 34;
+  const spread = who === 'B' ? 52 : 40;
   let by = sy + p.capeLen * (who === 'B' ? 1.06 : 1);
   if (!air) by = Math.min(by, -3);
   const wind = p.wind, mid = (sy + by) / 2;
@@ -230,65 +234,95 @@ function drawCape(who, sy, p, t, air) {
   ctx.stroke();
 }
 
-function mouthShape(mx, my, m, mood) {
-  ctx.lineCap = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 2;
+// sitcom-style faces: big skulls, jutting chins, touching white eyes, thick outlines
+const blinkAt = (t, seed) => ((t + seed) % 3.7) < .13;
+function blob(parts, fill, lw = 7) {
+  ctx.lineJoin = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = lw;
+  for (const p of parts) { ctx.beginPath(); p(); ctx.stroke(); }
+  ctx.fillStyle = fill;
+  for (const p of parts) { ctx.beginPath(); p(); ctx.fill(); }
+}
+function mouthShape(mx, my, m, mood, w = 26) {
+  ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.strokeStyle = INK; ctx.lineWidth = 3;
   if (m > .08) {
-    ctx.beginPath(); ctx.ellipse(mx, my, 5, 1.2 + m * 4.6, 0, 0, Math.PI * 2); ctx.fillStyle = '#4b1316'; ctx.fill(); ctx.lineWidth = 1.6; ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(mx, my + m * 2.4, 3, 1 + m * 1.2, 0, 0, Math.PI * 2); ctx.fillStyle = '#d0575d'; ctx.fill();
+    const h = 5 + m * 17;
+    const path = () => { ctx.beginPath(); ctx.moveTo(mx - w / 2, my); ctx.quadraticCurveTo(mx, my - 3, mx + w / 2, my); ctx.quadraticCurveTo(mx + w / 2 - 2, my + h, mx, my + h); ctx.quadraticCurveTo(mx - w / 2 + 2, my + h, mx - w / 2, my); ctx.closePath(); };
+    path(); ctx.fillStyle = '#3b0d10'; ctx.fill();
+    ctx.save(); path(); ctx.clip();
+    ctx.fillStyle = '#fff'; ctx.fillRect(mx - w / 2, my - 3, w, 5 + m * 1.5);
+    ctx.beginPath(); ctx.ellipse(mx + 2, my + h, w * .3, h * .38, 0, 0, Math.PI * 2); ctx.fillStyle = '#e0646a'; ctx.fill();
+    ctx.restore(); path(); ctx.stroke();
     return;
   }
   ctx.beginPath();
-  if (mood === 'smile') ctx.arc(mx, my - 4, 6, .2 * Math.PI, .8 * Math.PI);
-  else if (mood === 'frown') ctx.arc(mx, my + 5, 6, 1.2 * Math.PI, 1.8 * Math.PI);
-  else if (mood === 'pain') { ctx.moveTo(mx - 6, my); ctx.lineTo(mx - 3, my - 2); ctx.lineTo(mx, my + 1); ctx.lineTo(mx + 3, my - 2); ctx.lineTo(mx + 6, my); }
-  else if (mood === 'smirk') { ctx.moveTo(mx - 5, my + 1); ctx.lineTo(mx + 3, my + 1); ctx.quadraticCurveTo(mx + 6, my, mx + 7, my - 3); }
-  else if (mood === 'surprise') { ctx.ellipse(mx, my, 3, 3.5, 0, 0, Math.PI * 2); ctx.fillStyle = '#4b1316'; ctx.fill(); }
-  else { ctx.moveTo(mx - 5, my); ctx.lineTo(mx + 5, my); }
+  if (mood === 'smile') { ctx.moveTo(mx - w / 2, my - 3); ctx.quadraticCurveTo(mx, my + 9, mx + w / 2, my - 4); ctx.moveTo(mx + w / 2 - 2, my - 7); ctx.lineTo(mx + w / 2 + 2, my - 2); }
+  else if (mood === 'frown') { ctx.moveTo(mx - w / 2, my + 3); ctx.quadraticCurveTo(mx, my - 6, mx + w / 2, my + 3); }
+  else if (mood === 'pain') { ctx.moveTo(mx - w / 2, my); for (let i = 1; i <= 6; i++) ctx.lineTo(mx - w / 2 + i * w / 6, my + (i % 2 ? -4 : 2)); }
+  else if (mood === 'smirk') { ctx.moveTo(mx - w / 2, my + 1); ctx.lineTo(mx + w / 4, my + 1); ctx.quadraticCurveTo(mx + w / 2, my, mx + w / 2 + 2, my - 6); }
+  else if (mood === 'surprise') { ctx.ellipse(mx, my + 3, 6, 8, 0, 0, Math.PI * 2); ctx.fillStyle = '#3b0d10'; ctx.fill(); }
+  else { ctx.moveTo(mx - w / 2, my); ctx.quadraticCurveTo(mx, my + 2, mx + w / 2, my - 1); }
   ctx.stroke();
 }
-
-function drawHead(who, cx, cy, m, mood) {
-  const C = PAL[who], fo = 3;
-  ctx.lineJoin = 'round';
+function eyesFG(cx, cy, mood, t, seed, pupils, lidColor) {
+  const big = mood === 'surprise' ? 1.25 : 1;
+  const E = [[cx + 3, cy - 8], [cx + 21, cy - 8]];
+  const blink = blinkAt(t, seed);
+  for (const [ex, ey] of E) {
+    ctx.beginPath(); ctx.ellipse(ex, ey, 10 * big, 12.5 * big, 0, 0, Math.PI * 2);
+    ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+    if (pupils && !blink) { ctx.beginPath(); ctx.arc(ex + 4, ey + 1, 3, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill(); }
+  }
+  for (const [ex, ey] of E) {
+    let lid = blink ? 1 : mood === 'frown' || mood === 'smirk' ? .38 : mood === 'pain' ? .7 : lidColor ? .25 : 0;
+    if (lid > 0) {
+      ctx.save(); ctx.beginPath(); ctx.ellipse(ex, ey, 10 * big, 12.5 * big, 0, 0, Math.PI * 2); ctx.clip();
+      ctx.fillStyle = lidColor || PAL.S.skin; ctx.fillRect(ex - 12, ey - 14, 24, 26 * lid);
+      ctx.beginPath(); ctx.moveTo(ex - 12, ey - 14 + 26 * lid); ctx.lineTo(ex + 12, ey - 14 + 26 * lid); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+      ctx.restore();
+      ctx.beginPath(); ctx.ellipse(ex, ey, 10 * big, 12.5 * big, 0, 0, Math.PI * 2); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+    }
+  }
+  return E;
+}
+function drawHead(who, cx, cy, m, mood, t = 0) {
+  const C = PAL[who];
+  const parts = [
+    () => ctx.ellipse(cx, cy - 8, 31, 35, 0, 0, Math.PI * 2),
+    () => ctx.ellipse(cx + 6, cy + 16, 30, 22, 0, 0, Math.PI * 2),
+    () => ctx.ellipse(cx + 15, cy + 29, 19, 14, 0, 0, Math.PI * 2),
+  ];
   if (who === 'S') {
-    for (const sx of [-1, 1]) { ctx.beginPath(); ctx.arc(cx + sx * 18.5, cy + 2, 4.5, 0, Math.PI * 2); fillStroke(C.skin, 2.5); }
-    ctx.beginPath(); ctx.ellipse(cx, cy, 18, 20, 0, 0, Math.PI * 2); fillStroke(C.skin);
-    // jaw shade
-    ctx.beginPath(); ctx.moveTo(cx - 12, cy + 12); ctx.quadraticCurveTo(cx, cy + 22, cx + 12, cy + 12); ctx.strokeStyle = 'rgba(160,90,60,.35)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(cx - 27, cy + 2, 7, 11, 0, 0, Math.PI * 2); ctx.fillStyle = C.skin; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx - 27, cy + 2, 4, -1, 1.4); ctx.lineWidth = 2; ctx.stroke();
+    blob(parts, C.skin);
     // hair
-    ctx.beginPath(); ctx.moveTo(cx - 19, cy - 1);
-    ctx.quadraticCurveTo(cx - 22, cy - 27, cx, cy - 23); ctx.quadraticCurveTo(cx + 22, cy - 27, cx + 19, cy - 1);
-    ctx.quadraticCurveTo(cx + 15, cy - 13, cx + 3, cy - 12); ctx.quadraticCurveTo(cx - 11, cy - 13, cx - 19, cy - 1);
-    fillStroke(C.hair, 2.5);
-    ctx.beginPath(); ctx.arc(cx + 5, cy - 8, 3, Math.PI * 1.1, Math.PI * 2.3); ctx.strokeStyle = C.hair; ctx.lineWidth = 2.4; ctx.stroke();
-    // eyes + brows
-    ctx.fillStyle = INK; ctx.strokeStyle = INK; ctx.lineWidth = 2.2; ctx.lineCap = 'round';
-    for (const ex of [-6.5 + fo, 7 + fo]) {
-      if (mood === 'pain') { ctx.beginPath(); ctx.moveTo(ex - 3, cy - 3); ctx.lineTo(ex + 1, cy); ctx.lineTo(ex - 3, cy + 2); ctx.stroke(); }
-      else if (mood === 'surprise') { ctx.beginPath(); ctx.arc(ex, cy, 4, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.arc(ex + 1, cy, 1.8, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill(); }
-      else { ctx.beginPath(); ctx.ellipse(ex, cy, 2.4, 3.4, 0, 0, Math.PI * 2); ctx.fillStyle = INK; ctx.fill(); ctx.beginPath(); ctx.arc(ex + .8, cy - 1.2, .9, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); }
-      const tiltB = mood === 'frown' || mood === 'pain' ? (ex < fo ? 2 : -2) : -1;
-      ctx.beginPath(); ctx.moveTo(ex - 4, cy - 7 - tiltB); ctx.lineTo(ex + 4, cy - 7 + tiltB); ctx.strokeStyle = INK; ctx.stroke();
-    }
-    mouthShape(cx + fo * .6, cy + 10, m, mood);
+    ctx.beginPath(); ctx.moveTo(cx - 31, cy + 4);
+    ctx.quadraticCurveTo(cx - 40, cy - 48, cx, cy - 46); ctx.quadraticCurveTo(cx + 34, cy - 46, cx + 31, cy - 20);
+    ctx.quadraticCurveTo(cx + 14, cy - 31, cx - 4, cy - 27); ctx.quadraticCurveTo(cx - 20, cy - 21, cx - 20, cy + 4); ctx.closePath();
+    fillStroke(C.hair, 3);
+    ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(cx + 11, cy - 25, 5, Math.PI * .9, Math.PI * 2.4); ctx.strokeStyle = C.hair; ctx.lineWidth = 3.5; ctx.stroke();
+    eyesFG(cx, cy, mood, t, 0.4, true, null);
+    // brows
+    ctx.strokeStyle = INK; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    const ang = mood === 'frown' || mood === 'pain' ? 4 : mood === 'surprise' ? -4 : 0;
+    ctx.beginPath(); ctx.moveTo(cx - 5, cy - 26 - ang); ctx.lineTo(cx + 9, cy - 25 + ang); ctx.moveTo(cx + 15, cy - 25 + ang); ctx.lineTo(cx + 29, cy - 26 - ang); ctx.stroke();
+    // nose
+    ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx + 27, cy + 2); ctx.quadraticCurveTo(cx + 37, cy + 7, cx + 28, cy + 12); ctx.stroke();
+    // chin cleft
+    ctx.beginPath(); ctx.moveTo(cx + 22, cy + 37); ctx.quadraticCurveTo(cx + 24, cy + 40, cx + 22, cy + 42); ctx.lineWidth = 2.5; ctx.stroke();
+    mouthShape(cx + 15, cy + 22, m, mood);
   } else {
-    // cowl ears
-    for (const sx of [-1, 1]) { poly([[cx + sx * 7, cy - 16], [cx + sx * 15, cy - 36], [cx + sx * 16, cy - 12]]); ctx.closePath(); fillStroke(C.cape, 2.5); }
-    ctx.beginPath(); ctx.ellipse(cx, cy, 18, 21, 0, 0, Math.PI * 2); fillStroke(C.cape);
-    // lower face
-    ctx.save(); ctx.beginPath(); ctx.ellipse(cx, cy, 16.5, 19.5, 0, 0, Math.PI * 2); ctx.clip();
-    ctx.beginPath(); ctx.moveTo(cx - 13 + fo, cy + 3); ctx.lineTo(cx + 13 + fo, cy + 3); ctx.lineTo(cx + 18 + fo, cy + 24); ctx.lineTo(cx - 18 + fo, cy + 24); ctx.closePath();
-    ctx.fillStyle = C.skin; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 2.4; ctx.stroke();
-    ctx.restore();
-    ctx.beginPath(); ctx.ellipse(cx, cy, 18, 21, 0, 0, Math.PI * 2); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
-    // eyes
-    const big = mood === 'surprise' ? 1.6 : 1;
-    for (const sx of [-1, 1]) {
-      const ex = cx + fo + sx * 7;
-      ctx.beginPath(); ctx.moveTo(ex - 5 * sx, cy - 6 * big); ctx.lineTo(ex + 4 * sx, cy - 3 * big); ctx.lineTo(ex - 3 * sx, cy - .5 + (big - 1) * 3); ctx.closePath();
-      ctx.fillStyle = '#f6f7ff'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 1.5; ctx.stroke();
+    for (const [a, b, c] of [[[cx - 20, cy - 26], [cx - 24, cy - 70], [cx - 5, cy - 36]], [[cx + 8, cy - 36], [cx + 19, cy - 72], [cx + 25, cy - 24]]]) {
+      poly([a, b, c]); ctx.closePath(); fillStroke(C.cape, 3.5);
     }
-    mouthShape(cx + fo * .6, cy + 12, m, mood === 'neutral' ? 'frown' : mood);
+    blob(parts, C.skin);
+    ctx.save(); ctx.beginPath(); parts.forEach(p => p()); ctx.clip();
+    poly([[cx - 70, cy - 90], [cx + 70, cy - 90], [cx + 70, cy + 4], [cx + 30, cy + 6], [cx + 10, cy + 12], [cx - 6, cy + 30], [cx - 70, cy + 44]]); ctx.closePath();
+    ctx.fillStyle = C.cape; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
+    ctx.strokeStyle = '#3a3e4a'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(cx - 20, cy - 36); ctx.quadraticCurveTo(cx - 6, cy - 44, cx + 10, cy - 38); ctx.stroke();
+    ctx.restore();
+    eyesFG(cx, cy - 2, mood === 'neutral' ? 'frown' : mood, t, 1.9, false, C.cape);
+    mouthShape(cx + 16, cy + 25, m, mood === 'neutral' ? 'frown' : mood, 24);
   }
 }
 
@@ -329,10 +363,11 @@ function drawCup(x, y, steam, t) {
 function drawHero(who, o) {
   const { x, y, s = 1.15, f = 1, rot = 0, mouth = 0, mood = 'neutral', t = 0 } = o;
   const p = o.pose || P.stand, C = PAL[who], out = {};
-  const footB = 42 * Math.cos(rad(p.lB)) + 40 * Math.cos(rad(p.lB + p.kB));
-  const footF = 42 * Math.cos(rad(p.lF)) + 40 * Math.cos(rad(p.lF + p.kF));
-  const hy = lerp(-Math.max(footB, footF, 30), -82, clamp(p.air, 0, 1));
-  const sy = hy - 58;
+  const TH = 30, SH = 30;
+  const footB = TH * Math.cos(rad(p.lB)) + SH * Math.cos(rad(p.lB + p.kB));
+  const footF = TH * Math.cos(rad(p.lF)) + SH * Math.cos(rad(p.lF + p.kF));
+  const hy = lerp(-Math.max(footB, footF, 22), -62, clamp(p.air, 0, 1));
+  const sy = hy - 62, hc = sy - 44;
   ctx.save(); ctx.translate(x, y); ctx.scale(s * f, s);
   if (o.alpha != null) ctx.globalAlpha = o.alpha;
   if (rot) { ctx.translate(0, hy - 20); ctx.rotate(rad(rot)); ctx.translate(0, -(hy - 20)); }
@@ -340,33 +375,36 @@ function drawHero(who, o) {
   ctx.save(); tilt(); drawCape(who, sy, p, t, p.air > .5); ctx.restore();
   for (const side of [-1, 1]) {
     const l = side < 0 ? p.lB : p.lF, k = side < 0 ? p.kB : p.kF;
-    const hip = [side * 9, hy], knee = add(hip, dv(l, 42)), foot = add(knee, dv(l + k, 40));
-    limb([hip, knee, foot], 15, C.suit, C.boot, who === 'S' ? .38 : .45);
+    const hip = [side * 11, hy], knee = add(hip, dv(l, TH)), foot = add(knee, dv(l + k, SH));
+    limb([hip, knee, foot], 18, C.suit, C.boot, who === 'S' ? .3 : .4);
     ctx.save(); ctx.translate(foot[0], foot[1]); ctx.rotate(rad(-(l + k) * .5 * (p.air > .5 ? 1 : 0)));
-    ctx.beginPath(); ctx.ellipse(5, 0, 10, 5.5, 0, 0, Math.PI * 2); fillStroke(C.boot, 2.5); ctx.restore();
+    ctx.beginPath(); ctx.ellipse(6, 0, 13, 7, 0, 0, Math.PI * 2); fillStroke(C.boot, 3); ctx.restore();
   }
   ctx.save(); tilt();
-  ctx.beginPath(); ctx.rect(-6, sy - 12, 12, 12); fillStroke(who === 'S' ? C.skin : C.cape, 2.5);
-  ctx.beginPath(); ctx.moveTo(-25, sy + 3); ctx.quadraticCurveTo(-26, sy - 5, -16, sy - 5); ctx.lineTo(16, sy - 5); ctx.quadraticCurveTo(26, sy - 5, 25, sy + 3);
-  ctx.quadraticCurveTo(22, (sy + hy) / 2, 15, hy + 3); ctx.lineTo(-15, hy + 3); ctx.quadraticCurveTo(-22, (sy + hy) / 2, -25, sy + 3); ctx.closePath();
-  fillStroke(C.suit);
-  ctx.strokeStyle = C.dark; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(0, sy + 31); ctx.lineTo(0, hy - 14); ctx.moveTo(-9, sy + 40); ctx.lineTo(9, sy + 40); ctx.stroke();
-  if (C.trunk) { poly([[-16, hy - 5], [16, hy - 5], [15, hy + 8], [4, hy + 10], [0, hy + 5], [-4, hy + 10], [-15, hy + 8]]); ctx.closePath(); fillStroke(C.trunk, 2.5); }
-  ctx.beginPath(); ctx.rect(-17, hy - 12, 34, 7); fillStroke(C.belt, 2);
-  if (who === 'B') { ctx.fillStyle = '#c99a1c'; for (const bx of [-12, -5, 3, 10]) ctx.fillRect(bx, hy - 11, 3, 5); }
-  drawEmblem(who, 0, sy + 15, f);
+  ctx.beginPath(); ctx.rect(-9, sy - 16, 18, 18); fillStroke(who === 'S' ? C.skin : C.cape, 3);
+  ctx.beginPath(); ctx.moveTo(-31, sy + 6); ctx.quadraticCurveTo(-32, sy - 6, -18, sy - 6); ctx.lineTo(18, sy - 6); ctx.quadraticCurveTo(32, sy - 6, 31, sy + 6);
+  ctx.quadraticCurveTo(28, (sy + hy) / 2, 21, hy + 4); ctx.lineTo(-21, hy + 4); ctx.quadraticCurveTo(-28, (sy + hy) / 2, -31, sy + 6); ctx.closePath();
+  fillStroke(C.suit, 3.5);
+  if (C.trunk) { poly([[-21, hy - 5], [21, hy - 5], [20, hy + 9], [5, hy + 12], [0, hy + 6], [-5, hy + 12], [-20, hy + 9]]); ctx.closePath(); fillStroke(C.trunk, 3); }
+  ctx.beginPath(); ctx.rect(-22, hy - 13, 44, 9); fillStroke(C.belt, 2.5);
+  if (who === 'B') { ctx.fillStyle = '#c99a1c'; for (const bx of [-16, -7, 4, 13]) ctx.fillRect(bx, hy - 12, 4, 7); }
+  ctx.save(); ctx.translate(0, sy + 20); ctx.scale(1.3, 1.3); drawEmblem(who, 0, 0, f); ctx.restore();
   for (const side of [-1, 1]) {
     const a = side < 0 ? p.aB : p.aF, e = side < 0 ? p.eB : p.eF;
-    const sh = [side * 22, sy + 3], el = add(sh, dv(a, 30)), hd = add(el, dv(a + e, 28));
-    limb([sh, el, hd], 12, C.suit, C.glove, .35);
-    ctx.beginPath(); ctx.arc(hd[0], hd[1], 7, 0, Math.PI * 2); fillStroke(C.hand, 2.5);
+    const sh = [side * 28, sy + 5], el = add(sh, dv(a, 27)), hd = add(el, dv(a + e, 26));
+    limb([sh, el, hd], 14, C.suit, C.glove, .35);
+    ctx.beginPath(); ctx.arc(hd[0], hd[1], 9, 0, Math.PI * 2); fillStroke(C.hand, 3);
+    const th = add(hd, dv(a + e + 70, 8));
+    ctx.beginPath(); ctx.arc(th[0], th[1], 4, 0, Math.PI * 2); fillStroke(C.hand, 2.5);
     if (side > 0) { out.hand = world(hd); out.handLocal = hd; }
   }
-  if (who === 'B') for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 19, sy - 1, 11, 6.5, sx * .25, 0, Math.PI * 2); fillStroke(C.cape, 2.5); }
-  if (o.cup) { const h = out.handLocal; ctx.save(); ctx.translate(h[0], h[1] - 3); ctx.scale(f < 0 ? -1 : 1, 1); drawCup(0, 0, 0, t); ctx.restore(); out.cup = world([h[0], h[1] - 16]); }
-  drawHead(who, 0, sy - 27, mouth, mood);
-  out.eye = world([5, sy - 27]);
-  out.chest = world([0, sy + 15]);
+  if (who === 'B') for (const sx of [-1, 1]) { ctx.beginPath(); ctx.ellipse(sx * 25, sy - 1, 13, 8, sx * .25, 0, Math.PI * 2); fillStroke(C.cape, 3); }
+  if (o.cup) { const h = out.handLocal; ctx.save(); ctx.translate(h[0], h[1] - 5); ctx.scale(f < 0 ? -1.3 : 1.3, 1.3); drawCup(0, 0, 0, t); ctx.restore(); out.cup = world([h[0], h[1] - 30]); }
+  drawHead(who, 0, hc, mouth, mood, t);
+  out.eye = world([12, hc - 8]);
+  out.chest = world([0, sy + 20]);
+  const hw = world([10, hc]);
+  HEADS[who] = { x: hw[0], y: hw[1], f };
   ctx.restore(); ctx.restore();
   return out;
 }
@@ -383,7 +421,7 @@ function batmobile(x, y, s, t, mouth, mood) {
   ctx.quadraticCurveTo(80, -54, 134, -38); ctx.lineTo(150, -27); ctx.lineTo(144, -14); ctx.closePath(); fillStroke('#1d2028', 3.5);
   ctx.strokeStyle = '#3a3f4d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(-120, -36); ctx.lineTo(130, -32); ctx.stroke();
   // driver
-  ctx.save(); ctx.translate(-12, -70); ctx.scale(.62, .62); drawHead('B', 0, 0, mouth, mood); ctx.restore();
+  ctx.save(); ctx.translate(-16, -74); ctx.scale(.42, .42); drawHead('B', 0, 0, mouth, mood, t); { const h = world([10, 0]); HEADS.B = { x: h[0], y: h[1], f: 1 }; } ctx.restore();
   ctx.beginPath(); ctx.moveTo(-62, -58); ctx.quadraticCurveTo(-20, -100, 46, -60); ctx.closePath();
   ctx.fillStyle = 'rgba(120,170,220,.32)'; ctx.fill(); ctx.strokeStyle = INK; ctx.lineWidth = 3; ctx.stroke();
   ctx.beginPath(); ctx.moveTo(-30, -82); ctx.quadraticCurveTo(-10, -88, 10, -82); ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 2; ctx.stroke();
@@ -539,6 +577,7 @@ function drawCity(L, baseY, color, winColor, litP, scroll, edge) {
 }
 const STARS = (() => { const r = rng(5); return Array.from({ length: 70 }, () => [r() * W, r() * 300, r() * 1.6 + .4, r() * 6]); })();
 function bgGotham(t, opt = {}) {
+  if (DRY) return;
   const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#080b20'); g.addColorStop(.6, '#2a2552'); g.addColorStop(1, '#41325e');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   for (const [sx, sy, r, ph] of STARS) { ctx.globalAlpha = .4 + .4 * Math.sin(t * 2 + ph); ctx.fillStyle = '#fff'; ctx.fillRect(sx, sy, r, r); }
@@ -563,6 +602,7 @@ function bgGotham(t, opt = {}) {
   ctx.fillStyle = fog; ctx.fillRect(0, 360, W, 110);
 }
 function rooftop() {
+  if (DRY) return;
   ctx.fillStyle = '#1b1c27'; ctx.fillRect(0, 440, W, 100);
   ctx.fillStyle = '#343749'; ctx.fillRect(0, 440, W, 5);
   ctx.strokeStyle = '#262838'; ctx.lineWidth = 2;
@@ -575,6 +615,7 @@ function rooftop() {
 }
 const CLOUDS = [[120, 90, 1], [520, 60, .8], [860, 120, 1.1], [1150, 80, .9]];
 function bgMetro(t) {
+  if (DRY) return;
   const g = ctx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#4d9cf0'); g.addColorStop(1, '#d8edff');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   const sg = ctx.createRadialGradient(820, 90, 20, 820, 90, 140); sg.addColorStop(0, 'rgba(255,248,200,.9)'); sg.addColorStop(1, 'rgba(255,248,200,0)');
@@ -592,6 +633,7 @@ function bgMetro(t) {
   drawCity(CITY.mNear, 470, '#eef2f8', '#86abd8', .85, 640, '#ccd6e4');
 }
 function bgRoad(t) {
+  if (DRY) return;
   const g = ctx.createLinearGradient(0, 0, 0, 400); g.addColorStop(0, '#2c2259'); g.addColorStop(.55, '#b14d6b'); g.addColorStop(1, '#ffb36b');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, 400);
   ctx.beginPath(); ctx.arc(720, 395, 92, Math.PI, 0); ctx.fillStyle = '#ffd88f'; ctx.fill();
@@ -605,6 +647,7 @@ function bgRoad(t) {
   for (let x = -ps; x < W; x += 90) ctx.fillRect(x, 384, 6, 26);
 }
 function bgCave(t) {
+  if (DRY) return;
   const g = ctx.createRadialGradient(600, 260, 40, 600, 260, 640); g.addColorStop(0, '#1f3142'); g.addColorStop(1, '#05070b');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   // monitor wall
@@ -631,6 +674,7 @@ function bgCave(t) {
   ctx.beginPath(); ctx.rect(476, 380, 150, 12); fillStroke('#3c4250', 3);
 }
 function bgStreet(t) {
+  if (DRY) return;
   const g = ctx.createLinearGradient(0, 0, 0, 470); g.addColorStop(0, '#6a3f86'); g.addColorStop(.6, '#e0727a'); g.addColorStop(1, '#ffc27a');
   ctx.fillStyle = g; ctx.fillRect(0, 0, W, 470);
   drawCity(CITY.sFar, 470, '#94587a', null, 0, 120);
@@ -646,6 +690,7 @@ function tint(color, a) { if (a <= 0) return; ctx.save(); ctx.globalAlpha = a; c
 const EPS = [
 {
   title: 'Midnight Rooftop', ar: 'سوبرمان يصل متأخراً إلى سطح في غوثام، وباتمان يطلب مهمة "هادئة".', dur: 28,
+  shots: [[0,'wide'],[4.6,'cu','S'],[8.0,'cu','B'],[11.2,'cu','S'],[14.8,'mcu','B'],[18.2,'cu','B'],[20.8,'cu','S'],[22.8,'wide'],[24.7,'cu','B',2.9]],
   lines: [
     [4.9, 'S', 'Nice night for brooding, Bruce.', 3.0],
     [8.1, 'B', "You're late. And you're glowing.", 3.0],
@@ -677,6 +722,7 @@ const EPS = [
 },
 {
   title: 'Race to Metropolis', ar: 'الباتموبيل ضد رجل الفولاذ في سباق، والفائز يحضر القهوة.', dur: 29,
+  shots: [[0,'wide'],[2.0,'cu','B',4.2],[5.6,'cu','S'],[8.6,'cu','B',4.2],[11.4,'cu','S'],[14.0,'wide'],[15.4,'cu','B',4.2],[18.2,'wide'],[20.6,'cu','S',2.3],[23.6,'cu','B',4.2],[25.8,'mcu','S',1.8]],
   lines: [
     [2.1, 'B', 'Batmobile. Zero to two hundred in four seconds.', 3.4],
     [5.7, 'S', 'Impressive. Want a head start?', 2.8],
@@ -719,6 +765,7 @@ const EPS = [
 },
 {
   title: 'The Lead Box', ar: 'ماذا يخبئ باتمان داخل الصندوق الرصاصي في الكهف؟', dur: 29.5,
+  shots: [[0,'wide'],[2.2,'cu','S'],[5.2,'cu','B'],[7.6,'pt',552,330,2.2],[9.0,'wide'],[9.4,'cu','S'],[12.2,'cu','B'],[15.2,'cu','S'],[18.4,'two'],[19.0,'cu','B'],[21.6,'cu','S'],[25.0,'cu','B',3],[27.0,'cu','S',2.9]],
   lines: [
     [2.3, 'S', "Bruce, what's in the lead box?", 2.8],
     [5.3, 'B', 'Nothing important.', 2.2],
@@ -747,6 +794,7 @@ const EPS = [
 },
 {
   title: 'The Signal', ar: 'لماذا تملك غوثام إشارة للخفاش ولا يملك سوبرمان إشارة خاصة به؟', dur: 28,
+  shots: [[0,'wide'],[1.9,'cu','S'],[4.7,'mcu','S',1.6],[6.9,'cu','B'],[12.5,'cu','S'],[15.5,'cu','B',3.1],[18.1,'mcu','S'],[21.7,'wide'],[23.9,'cu','S']],
   lines: [
     [2.0, 'S', 'So Gotham has a Bat-Signal.', 2.6],
     [4.8, 'S', "Where's MY signal?", 2.0],
@@ -778,6 +826,7 @@ const EPS = [
 },
 {
   title: 'Metal Mayhem', ar: 'روبوت عملاق، ولكمة واحدة، وباتارانغ في المكان الصحيح.', dur: 29.5,
+  shots: [[0,'wide'],[1.7,'cu','B'],[3.6,'wide'],[5.3,'cu','S'],[7.3,'wide'],[8.9,'pt',712,128,2.5],[10.2,'wide'],[11.3,'cu','S'],[13.3,'cu','B'],[15.4,'wide'],[19.9,'cu','S'],[21.9,'cu','B'],[24.1,'cu','S'],[26.7,'cu','B',2.9]],
   lines: [
     [1.8, 'B', 'Robot. Fifty tons. Weak spot: the back panel.', 3.4],
     [5.4, 'S', "I'll keep it busy.", 2.0],
@@ -873,10 +922,28 @@ function titleCard(i, t) {
   ctx.font = '54px Bangers, Impact, sans-serif'; ctx.lineWidth = 10; ctx.strokeText(EPS[i].title.toUpperCase(), 0, 140); ctx.fillStyle = '#ff5b4d'; ctx.fillText(EPS[i].title.toUpperCase(), 0, 140);
   ctx.restore();
 }
+function camera(ep, t) {
+  let sh = ['wide']; for (const s of ep.shots || []) if (t >= s[0]) sh = s.slice(1);
+  let z = 1, cx = W / 2, cy = H / 2;
+  const kind = sh[0];
+  if (kind === 'cu' || kind === 'mcu') { const h = HEADS[sh[1]]; if (h) { z = sh[2] || (kind === 'cu' ? 2.6 : 1.7); cx = h.x + h.f * 90 / z; cy = h.y + (kind === 'cu' ? 14 : 48); } }
+  else if (kind === 'two') { const a = HEADS.S, b = HEADS.B; if (a && b) { cx = (a.x + b.x) / 2; cy = (a.y + b.y) / 2 + 80; z = clamp(W * .8 / (Math.abs(a.x - b.x) + 240), 1, 1.9); } }
+  else if (kind === 'pt') { cx = sh[1]; cy = sh[2]; z = sh[3]; }
+  cx = clamp(cx, W / 2 / z, W - W / 2 / z); cy = clamp(cy, H / 2 / z, H - H / 2 / z);
+  return { z, cx, cy };
+}
 function render(i, t) {
   const ep = EPS[i];
-  ctx.setTransform(K, 0, 0, K, 0, 0);
-  ctx.save(); ep.draw(t, mouthFn(ep, t)); ctx.restore();
+  const mf = mouthFn(ep, t), real = ctx;
+  // dry pass: find where every head is, so the camera can frame it
+  ctx = DUMMY; DRY = true; for (const k in HEADS) delete HEADS[k];
+  ctx.setTransform(K, 0, 0, K, 0, 0); CAMI = new DOMMatrix([1 / K, 0, 0, 1 / K, 0, 0]);
+  ctx.save(); try { ep.draw(t, mf); } finally { ctx.restore(); ctx = real; DRY = false; }
+  const c = camera(ep, t);
+  const M = new DOMMatrix([K * c.z, 0, 0, K * c.z, K * (W / 2 - c.cx * c.z), K * (H / 2 - c.cy * c.z)]);
+  CAMI = M.inverse(); ctx.setTransform(M);
+  ctx.save(); ep.draw(t, mf); ctx.restore();
+  CAMI = new DOMMatrix([1 / K, 0, 0, 1 / K, 0, 0]);
   ctx.setTransform(K, 0, 0, K, 0, 0);
   subtitles(ep, t);
   titleCard(i, t);
