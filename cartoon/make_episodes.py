@@ -18,6 +18,7 @@ Usage:
     pip install piper-tts pillow numpy
     python3 make_episodes.py            # renders all episodes to ./output
     python3 make_episodes.py 2          # renders only episode 2
+    python3 make_episodes.py --shorts   # vertical 1080x1920 YouTube Shorts versions
 """
 import hashlib
 import math
@@ -567,13 +568,29 @@ def bg_kitchen(pn, t, st):
 
 BACKGROUNDS = {"tower": bg_tower, "kitchen": bg_kitchen}
 
-SHOTS = {
+SHOTS_LANDSCAPE = {
     "wide": (640, 360, 1.0),
     "cu_w": (420, 300, 1.8),
     "cu_m": (880, 470, 1.9),
     "k_wide": (640, 360, 1.0),
     "k_cu_w": (420, 255, 1.6),
 }
+# YouTube Shorts: vertical 9:16, 1080x1920, framed for a phone screen
+SHOTS_SHORTS = {
+    "wide": (655, 470, 1.5),
+    "cu_w": (440, 380, 2.6),
+    "cu_m": (880, 540, 3.0),
+    "k_wide": (620, 470, 1.7),
+    "k_cu_w": (430, 330, 2.4),
+}
+SHOTS = SHOTS_LANDSCAPE
+SHORTS = False
+
+
+def set_shorts():
+    global W, H, SHOTS, SHORTS, OUT_DIR
+    W, H, SHOTS, SHORTS = 1080, 1920, SHOTS_SHORTS, True
+    OUT_DIR = os.path.join(HERE, "output", "shorts")
 
 # --------------------------------------------------------------------------
 # Gag effects. Each gets (state, local_t, duration, overlays) and may mutate
@@ -728,12 +745,12 @@ def font(size):
 def title_card(ep, t):
     img = Image.new("RGB", (W * SS, H * SS), (30, 26, 70))
     pn = Pen(img, Cam(640, 360, 1.0))
-    pn.ellipse(640, 760, 900, 260, (52, 40, 110), 0)
+    pn.ellipse(640, 360 + H * 0.56, 900, 260 + H * 0.2, (52, 40, 110), 0)
     rnd = random.Random(7)
-    for i in range(40):
-        sx, sy = rnd.uniform(0, 1280), rnd.uniform(0, 720)
+    for i in range(40 if not SHORTS else 90):
+        sx, sy = rnd.uniform(640 - W / 2, 640 + W / 2), rnd.uniform(360 - H / 2, 360 + H / 2)
         pn.star(sx, sy, 3 + 3 * abs(math.sin(t * 5 + i)), (250, 240, 200), 0, points=4)
-    pn2 = Pen(img, Cam(655, 175, 0.5))
+    pn2 = Pen(img, Cam(655, 210, 1.2) if SHORTS else Cam(655, 175, 0.5))
     st = dict(w_arm=1, w_pose="up", w_brow=1, w_look=(0.4, 0.3), m_arms=1, m_look=(-0.4, 0.3),
               w_talk=0, m_talk=0.6)
     draw_wizard(pn2, 430, 660, st, t)
@@ -742,6 +759,15 @@ def title_card(ep, t):
     img = img.resize((W, H), Image.LANCZOS)
     d = ImageDraw.Draw(img)
     pop = min(1.0, t / 0.25)
+    if SHORTS:
+        f = font(int(120 * (0.6 + 0.4 * pop)))
+        d.text((W / 2, 300), "GORBO & PIP", font=f, fill=YELLOW, anchor="mm",
+               stroke_width=9, stroke_fill=INK)
+        d.text((W / 2, 430), f"Episode {ep['num']}", font=font(54), fill=(255, 255, 255),
+               anchor="mm", stroke_width=5, stroke_fill=INK)
+        d.text((W / 2, 510), ep["title"], font=font(62), fill=(255, 255, 255),
+               anchor="mm", stroke_width=5, stroke_fill=INK)
+        return img
     f = font(int(96 * (0.6 + 0.4 * pop)))
     d.text((W / 2, 120), "GORBO & PIP", font=f, fill=YELLOW, anchor="mm",
            stroke_width=7, stroke_fill=INK)
@@ -792,8 +818,25 @@ def render_frame(ep, segs, fi):
     if seg["type"] == "line":                     # English captions
         d = ImageDraw.Draw(img)
         name = "GORBO" if seg["who"] == "W" else "PIP"
-        d.text((W / 2, H - 46), f"{name}: {seg['text']}", font=font(30), fill=(255, 255, 255),
-               anchor="mm", stroke_width=4, stroke_fill=INK)
+        if SHORTS:   # big, wrapped, above the Shorts UI at the bottom
+            words, lines, cur = seg["text"].split(), [], ""
+            for wd in words:
+                trial = (cur + " " + wd).strip()
+                if d.textlength(trial, font=font(58)) > W - 140 and cur:
+                    lines.append(cur)
+                    cur = wd
+                else:
+                    cur = trial
+            lines.append(cur)
+            y0 = 1360
+            d.text((W / 2, y0), name, font=font(46), fill=YELLOW, anchor="mm",
+                   stroke_width=5, stroke_fill=INK)
+            for i, ln in enumerate(lines):
+                d.text((W / 2, y0 + 70 + i * 70), ln, font=font(58), fill=(255, 255, 255),
+                       anchor="mm", stroke_width=6, stroke_fill=INK)
+        else:
+            d.text((W / 2, H - 46), f"{name}: {seg['text']}", font=font(30), fill=(255, 255, 255),
+                   anchor="mm", stroke_width=4, stroke_fill=INK)
     return img
 
 
@@ -809,7 +852,8 @@ def render_episode(ep):
         wf.setframerate(SR)
         wf.writeframes(mix_audio(segs, total).tobytes())
     slug = ep["title"].lower().replace(" ", "_")
-    out = os.path.join(OUT_DIR, f"gorbo_and_pip_ep{ep['num']}_{slug}.mp4")
+    suffix = "_short" if SHORTS else ""
+    out = os.path.join(OUT_DIR, f"gorbo_and_pip_ep{ep['num']}_{slug}{suffix}.mp4")
     proc = subprocess.Popen(
         ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24",
          "-s", f"{W}x{H}", "-r", str(FPS), "-i", "-", "-i", wav_path,
@@ -826,13 +870,17 @@ def render_episode(ep):
 
 
 def main():
-    want = {int(a) for a in sys.argv[1:]}
+    args = sys.argv[1:]
+    if "--shorts" in args:
+        set_shorts()
+        args.remove("--shorts")
+    want = {int(a) for a in args}
     outs = [render_episode(ep) for ep in EPISODES if not want or ep["num"] in want]
     if len(outs) > 1:
         lst = os.path.join(CACHE, "concat.txt")
         with open(lst, "w") as f:
             f.writelines(f"file '{o}'\n" for o in outs)
-        full = os.path.join(OUT_DIR, "gorbo_and_pip_all_episodes.mp4")
+        full = os.path.join(OUT_DIR, "gorbo_and_pip_all_episodes" + ("_short" if SHORTS else "") + ".mp4")
         subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-f", "concat", "-safe", "0",
                         "-i", lst, "-c", "copy", full], check=True)
         print("All episodes ->", full)
