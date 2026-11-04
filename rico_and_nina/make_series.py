@@ -42,8 +42,10 @@ GROUND = 660
 SHORTS = False
 OUT_DIR = os.path.join(HERE, "output")
 
-base.VOICES["R"] = ("en/en_US/ryan/high/en_US-ryan-high", 0.97, 1.05, 0.95)
-base.VOICES["N"] = ("en/en_US/amy/medium/en_US-amy-medium", 1.04, 1.02, 0.95)
+base.VOICES["r"] = ("en/en_US/ryan/high/en_US-ryan-high", 0.97, 1.05, 0.95)          # Rico
+base.VOICES["n"] = ("en/en_US/amy/medium/en_US-amy-medium", 1.04, 1.02, 0.95)          # Nina
+base.VOICES["o"] = ("en/en_GB/jenny_dioco/medium/en_GB-jenny_dioco-medium", 0.88, 1.0, 1.08)  # Grandma Rosa
+base.VOICES["d"] = ("en/en_US/joe/medium/en_US-joe-medium", 0.82, 1.12, 1.05)          # Officer Duke
 
 
 def set_format(shorts):
@@ -211,10 +213,22 @@ def ik(a, b, l1, l2, bend):
 
 RICO = dict(key="r", s=1.0, face=1, phase=0.0, skin=(232, 178, 138), hair=(62, 40, 26), iris=(96, 64, 32),
             top=(242, 106, 150), pattern=(255, 236, 120), bottoms=(204, 178, 124), long=False,
-            shoes=(250, 250, 250), female=False)
+            shoes=(250, 250, 250), female=False, style="rico", sleeves="short", bulk=1.0, lean=0.0)
 NINA = dict(key="n", s=0.93, face=-1, phase=1.7, skin=(168, 108, 76), hair=(204, 80, 44), iris=(70, 44, 24),
             top=(36, 182, 168), pattern=None, bottoms=(62, 100, 176), long=True,
-            shoes=(226, 52, 60), female=True)
+            shoes=(226, 52, 60), female=True, style="nina", sleeves="none", bulk=1.0, lean=0.0)
+# Grandma Rosa: retired, gray bun, round glasses, purple cardigan — secretly a pro gamer
+ROSA = dict(key="o", s=0.86, face=-1, phase=0.7, skin=(240, 204, 178), hair=(214, 214, 222), iris=(70, 110, 150),
+            top=(150, 92, 168), pattern=None, bottoms=(96, 74, 120), long=True,
+            shoes=(120, 80, 50), female=True, style="rosa", sleeves="long", bulk=1.06, lean=0.07)
+# Officer Duke: big mall security guard with a mustache and a cap
+DUKE = dict(key="d", s=1.08, face=-1, phase=2.4, skin=(192, 136, 98), hair=(30, 26, 24), iris=(60, 40, 24),
+            top=(44, 64, 116), pattern=None, bottoms=(36, 48, 86), long=True,
+            shoes=(30, 30, 34), female=False, style="duke", sleeves="short", bulk=1.25, lean=0.0)
+SPECS = {"r": RICO, "n": NINA, "o": ROSA, "d": DUKE}
+DEFAULT_X = {"r": 520, "n": 770, "o": 960, "d": 1020}
+NAMES = {"r": "RICO", "n": "NINA", "o": "GRANDMA ROSA", "d": "OFFICER DUKE"}
+NAME_COL = {"r": (255, 140, 210), "n": (90, 230, 210), "o": (200, 170, 255), "d": (130, 180, 255)}
 
 
 def arm_target(arms, legs, i, sx, f, ph, t, s, J):
@@ -226,6 +240,10 @@ def arm_target(arms, legs, i, sx, f, ph, t, s, J):
         return (sx * 6 + f * math.sin(ph + (i + 1) * math.pi) * 60, 105), (-f, 0.4)
     if arms == "up":
         return (sx * 70, -165 + math.sin(t * 16 + i) * 14), (sx, 0.2)
+    if arms == "wave":
+        if front:
+            return (f * 62 + math.sin(t * 14) * 26, -150), (sx, 0.3)
+        return (sx * 14, 184), (sx, 0.3)
     if arms == "shrug":
         return (sx * 85, 75), (sx, 0.6)
     if arms == "hips":
@@ -238,8 +256,12 @@ def arm_target(arms, legs, i, sx, f, ph, t, s, J):
         return (f * 125 + sx * 8, 72), (0, 1)
     if arms == "point" and front:
         return (f * 188, -12), (0, 1)
+    if arms == "stop" and front:
+        return (f * 150, -60), (0, 1)
     if arms == "hold" and front:
         return (f * 70, 105), (0, 1)
+    if arms == "explain" and front:
+        return (f * 62 + math.sin(t * 6) * 14, 88 + math.sin(t * 7.3) * 16), (sx, 0.5)
     if arms == "salute" and front:
         hx, hy = J["H"][0] - J["sh%d" % i][0], J["H"][1] - J["sh%d" % i][1]
         return ((hx + f * 18) / s, (hy - 16) / s), (sx, -0.6)
@@ -251,17 +273,21 @@ def pose(spec, x, y, st, t):
     f = st.get(k + "_face", spec["face"])
     legs = st.get(k + "_legs", "stand")
     arms = st.get(k + "_arms", "rest")
-    ph = t * (15 if legs == "run" else 9) + spec["phase"]
+    talk = st.get(k + "_talk", 0.0)
+    if arms == "rest" and legs == "stand" and st.get(k + "_speaking"):
+        arms = "explain"                                   # talk with your hands
+    ph = t * (15 if legs == "run" else 9 * st.get(k + "_wspd", 1.0)) + spec["phase"]
     jump = abs(math.sin(t * 9 + spec["phase"])) * 24 if st.get(k + "_bounce") else 0.0
     bob = {"walk": -abs(math.cos(ph)) * 6, "run": -abs(math.cos(ph)) * 14}.get(legs, math.sin(t * 2 + spec["phase"]) * 1.5)
-    lean = {"run": 0.17, "walk": 0.04}.get(legs, 0.0)
+    lean = {"run": 0.17, "walk": 0.04}.get(legs, 0.0) + spec["lean"]
+    sway = math.sin(t * 1.3 + spec["phase"]) * 3 if legs == "stand" else 0.0
     gy = y - (30 if legs == "skate" else 0)
     crouch = 26 if legs == "skate" else 0
-    P = (x, gy - 280 * s + bob - jump + crouch)
+    P = (x + sway, gy - 280 * s + bob - jump + crouch)
     C = (P[0] + f * math.sin(lean) * 170 * s, P[1] - math.cos(lean) * 170 * s)
     J = dict(P=P, C=C, f=f, s=s, legs=legs, arms=arms)
     for i, sx in enumerate((-1, 1)):
-        hip = (P[0] + sx * 22 * s, P[1] + 6 * s)
+        hip = (P[0] + sx * 22 * s * spec["bulk"], P[1] + 6 * s)
         q = ph + i * math.pi
         if legs == "walk":
             foot = (x + sx * 18 * s + f * math.sin(q) * 55 * s, gy - 16 * s - max(0, math.cos(q)) * 20 * s)
@@ -270,13 +296,14 @@ def pose(spec, x, y, st, t):
         elif legs == "skate":
             foot = (x + sx * 50 * s, gy - 10)
         else:
-            foot = (x + sx * 28 * s, gy - 16 * s - jump)
+            foot = (x + sx * 28 * s * spec["bulk"], gy - 16 * s - jump)
         knee, ankle = ik(hip, foot, 130 * s, 134 * s, (f, 0))
         J["leg%d" % i] = (hip, knee, ankle)
-    J["H"] = (C[0] + f * 3 * s, C[1] - 60 * s)
+    nod = math.sin(t * 11) * talk * 3 * s
+    J["H"] = (C[0] + f * 3 * s + f * talk * 2 * s, C[1] - 60 * s - talk * 2 * s + nod)
     J["N"] = (C[0], C[1] - 8 * s)
     for i, sx in enumerate((-1, 1)):
-        sh = (C[0] + sx * 48 * s, C[1] + 8 * s)
+        sh = (C[0] + sx * 48 * s * spec["bulk"], C[1] + 8 * s)
         J["sh%d" % i] = sh
         (rx, ry), bend = arm_target(arms, legs, i, sx, f, ph, t, s, J)
         el, wr = ik(sh, (sh[0] + rx * s, sh[1] + ry * s), 100 * s, 94 * s, bend)
@@ -352,44 +379,51 @@ def donut(pn, x, y, r=22):
     pn.ellipse(x, y - 2, r * 0.28, r * 0.2, (214, 160, 90), 2)
 
 
+def ring(rig, cx, cy, r, col=INK, w=2.5):
+    rig.line([(cx + math.cos(a) * r, cy + math.sin(a) * r) for a in np.linspace(0, 2 * math.pi, 17)], col, w)
+
+
 def draw_human(pn, spec, x, y, st, t, seated=False):
     k = spec["key"]
     J = pose(spec, x, y, st, t)
     rig = make_rig(pn, spec, x, y, st)
     s, f, P, C, H = J["s"], J["f"], J["P"], J["C"], J["H"]
     skin, hair, top = spec["skin"], spec["hair"], spec["top"]
-    fem = spec["female"]
+    fem, style, b = spec["female"], spec["style"], spec["bulk"]
     wind = -14 * f if st.get(k + "_wind") else 0
 
-    if fem:  # big curls behind the head
+    if style == "nina":  # big curls behind the head
         curls = []
         for i in range(13):
             a = math.pi * (0.85 + 1.3 * i / 12)
             curls.append((H[0] + wind + math.cos(a) * 42 * s, H[1] - 6 * s + math.sin(a) * 42 * s, 17 * s, 17 * s))
         curls += [(H[0] - 38 * s + wind, H[1] + 30 * s, 15 * s, 22 * s), (H[0] + 38 * s + wind, H[1] + 30 * s, 15 * s, 22 * s)]
         rig.blob(curls, hair, 3)
+    if style == "rosa":  # bun
+        rig.blob([(H[0] - f * 6 * s, H[1] - 42 * s, 17 * s, 15 * s)], hair, 3)
 
     if not seated:
         for i in (0, 1):
             hip, knee, ankle = J["leg%d" % i]
             if spec["long"]:
-                rig.chain([hip, knee, ankle], [17 * s, 12.5 * s, 9 * s], spec["bottoms"])
+                rig.chain([hip, knee, ankle], [17 * s * b, 12.5 * s * b, 9 * s], spec["bottoms"])
             else:
                 rig.chain([hip, knee, ankle], [15 * s, 11 * s, 8 * s], skin)
                 rig.chain([hip, lp(hip, knee, 0.72)], [19 * s, 16 * s], spec["bottoms"])
             rig.blob([(ankle[0] + f * 10 * s, ankle[1] + 8 * s, 20 * s, 10 * s),
                       (ankle[0] + f * 25 * s, ankle[1] + 10 * s, 11 * s, 8 * s)], spec["shoes"], 3)
             xs = sorted([ankle[0] - f * 9 * s, ankle[0] + f * 34 * s])
-            rig.line([(xs[0], ankle[1] + 16 * s), (xs[1], ankle[1] + 16 * s)], (255, 255, 255) if fem else (200, 200, 205), 2.5)
+            sole = (255, 255, 255) if style == "nina" else (200, 200, 205) if style == "rico" else darker(spec["shoes"], 0.6)
+            rig.line([(xs[0], ankle[1] + 16 * s), (xs[1], ankle[1] + 16 * s)], sole, 2.5)
 
     # torso
-    if fem:
+    if style == "nina":
         if not seated:
             rig.poly([(P[0] - 40 * s, P[1] - 34 * s), (P[0] + 40 * s, P[1] - 34 * s),
                       (P[0] + 46 * s, P[1] + 24 * s), (P[0] - 46 * s, P[1] + 24 * s)], spec["bottoms"], 3)
         rig.poly([(C[0] - 30 * s, C[1] + 90 * s), (C[0] + 30 * s, C[1] + 90 * s),
                   (P[0] + 38 * s, P[1] - 30 * s), (P[0] - 38 * s, P[1] - 30 * s)], skin, 3)
-        rig.ell(P[0] + f * 2 * s, P[1] - 48 * s, 1.8 * s, 2.4 * s, darker(skin, 0.7), 0)        # navel
+        rig.ell(P[0] + f * 2 * s, P[1] - 48 * s, 1.8 * s, 2.4 * s, darker(skin, 0.7), 0)
         tp = [(C[0] - 44 * s, C[1]), (C[0] + 44 * s, C[1]), (C[0] + 38 * s, C[1] + 48 * s),
               (C[0] + 32 * s, C[1] + 94 * s), (C[0] - 32 * s, C[1] + 94 * s), (C[0] - 38 * s, C[1] + 48 * s)]
         rig.poly(tp, top, 3)
@@ -398,70 +432,113 @@ def draw_human(pn, spec, x, y, st, t, seated=False):
         rig.line([(C[0] - 30 * s, C[1] + 40 * s), (C[0] + 30 * s, C[1] + 40 * s)], (250, 236, 120), 3)
     else:
         if not seated:
-            rig.poly([(P[0] - 44 * s, P[1] - 16 * s), (P[0] + 44 * s, P[1] - 16 * s),
-                      (P[0] + 48 * s, P[1] + 30 * s), (P[0] - 48 * s, P[1] + 30 * s)], spec["bottoms"], 3)
-        tp = [(C[0] - 56 * s, C[1] - 2 * s), (C[0] + 56 * s, C[1] - 2 * s), (C[0] + 50 * s, C[1] + 42 * s),
-              (P[0] + 44 * s, P[1] - 48 * s), (P[0] + 46 * s, P[1] + 8 * s), (P[0] - 46 * s, P[1] + 8 * s),
-              (P[0] - 44 * s, P[1] - 48 * s), (C[0] - 50 * s, C[1] + 42 * s)]
+            rig.poly([(P[0] - 44 * s * b, P[1] - 16 * s), (P[0] + 44 * s * b, P[1] - 16 * s),
+                      (P[0] + 48 * s * b, P[1] + 30 * s), (P[0] - 48 * s * b, P[1] + 30 * s)], spec["bottoms"], 3)
+        belly = 1.12 if style == "duke" else 1.0
+        tp = [(C[0] - 56 * s * b, C[1] - 2 * s), (C[0] + 56 * s * b, C[1] - 2 * s), (C[0] + 50 * s * b, C[1] + 42 * s),
+              (P[0] + 44 * s * b * belly, P[1] - 48 * s), (P[0] + 46 * s * b, P[1] + 8 * s), (P[0] - 46 * s * b, P[1] + 8 * s),
+              (P[0] - 44 * s * b * belly, P[1] - 48 * s), (C[0] - 50 * s * b, C[1] + 42 * s)]
         rig.poly(tp, top, 3)
-        rig.poly([(C[0] + 22 * s, C[1] + 2 * s), (C[0] + 53 * s, C[1] + 1 * s), (C[0] + 47 * s, C[1] + 42 * s),
-                  (P[0] + 41 * s, P[1] - 48 * s), (P[0] + 43 * s, P[1] + 5 * s), (P[0] + 18 * s, P[1] + 5 * s)],
+        rig.poly([(C[0] + 22 * s * b, C[1] + 2 * s), (C[0] + 53 * s * b, C[1] + 1 * s), (C[0] + 47 * s * b, C[1] + 42 * s),
+                  (P[0] + 41 * s * b * belly, P[1] - 48 * s), (P[0] + 43 * s * b, P[1] + 5 * s), (P[0] + 18 * s * b, P[1] + 5 * s)],
                  darker(top, 0.88), 0)
-        for fx, fy in ((-30, 30), (18, 62), (-12, 100), (34, 18), (-36, 130), (24, 140)):
-            px, py = rig.T((C[0] + fx * s, C[1] + fy * s))
-            pn.star(px, py, 7 * s, spec["pattern"], 2)
+        if spec["pattern"]:
+            for fx, fy in ((-30, 30), (18, 62), (-12, 100), (34, 18), (-36, 130), (24, 140)):
+                px, py = rig.T((C[0] + fx * s, C[1] + fy * s))
+                pn.star(px, py, 7 * s, spec["pattern"], 2)
         rig.line([(C[0], C[1] + 8 * s), (P[0] + f * 2 * s, P[1] + 6 * s)], darker(top, 0.7), 2)
-        rig.poly([(C[0] - 16 * s, C[1] - 3 * s), (C[0] + 16 * s, C[1] - 3 * s), (C[0], C[1] + 24 * s)], skin, 2.5)
+        if style == "rico":
+            rig.poly([(C[0] - 16 * s, C[1] - 3 * s), (C[0] + 16 * s, C[1] - 3 * s), (C[0], C[1] + 24 * s)], skin, 2.5)
+        if style == "rosa":
+            for j in range(4):
+                rig.ell(C[0] + 4 * s, C[1] + (30 + j * 34) * s, 3.5 * s, 3.5 * s, (250, 240, 200), 1.5)
+            for j in range(9):
+                a = math.pi * (0.15 + 0.7 * j / 8)
+                rig.ell(C[0] + math.cos(a) * 22 * s, C[1] - 4 * s + math.sin(a) * 18 * s, 3 * s, 3 * s, (255, 255, 255), 1)
+        if style == "duke":
+            rig.poly([(C[0] - 14 * s, C[1] - 3 * s), (C[0] + 14 * s, C[1] - 3 * s), (C[0], C[1] + 20 * s)], (250, 250, 250), 2)
+            px, py = rig.T((C[0] - f * 28 * s, C[1] + 34 * s))
+            pn.star(px, py, 11 * s, (250, 210, 60), 2)
+            rig.line([(P[0] - 46 * s * b, P[1] - 6 * s), (P[0] + 46 * s * b, P[1] - 6 * s)], (24, 24, 28), 9)
+            rig.ell(P[0], P[1] - 6 * s, 8 * s, 6 * s, (220, 190, 80), 2)
 
     # neck & head
-    rig.chain([J["N"], (H[0], H[1] + 30 * s)], [10 * s, 10 * s], skin, 3, shade=False)
-    jaw = (24 * s, 27 * s) if fem else (26 * s, 29 * s)
+    rig.chain([J["N"], (H[0], H[1] + 30 * s)], [10 * s * (1.2 if style == "duke" else 1), 10 * s], skin, 3, shade=False)
+    jaw = (24 * s, 27 * s) if fem else (26 * s, 29 * s) if style == "rico" else (30 * s, 30 * s)
     rig.blob([(H[0], H[1] - 6 * s, 31 * s, 33 * s), (H[0] + f * 2 * s, H[1] + 12 * s) + jaw,
               (H[0] - 31 * s, H[1] + 2 * s, 6 * s, 9 * s), (H[0] + 31 * s, H[1] + 2 * s, 6 * s, 9 * s)], skin, 3)
-    rig.ell(H[0] - f * 19 * s, H[1] + 14 * s, 6 * s, 3.5 * s, darker(skin, 0.93), 0)       # cheek tone
-    if not fem and not st.get("r_bigbeard"):
-        rig.ell(H[0] + f * 3 * s, H[1] + 23 * s, 21 * s, 13 * s, darker(skin, 0.86), 0)    # stubble
+    rig.ell(H[0] - f * 19 * s, H[1] + 14 * s, 6 * s, 3.5 * s, darker(skin, 0.93), 0)
+    if style == "rico" and not st.get("r_bigbeard"):
+        rig.ell(H[0] + f * 3 * s, H[1] + 23 * s, 21 * s, 13 * s, darker(skin, 0.86), 0)
 
     mood = st.get(k + "_mood", "")
     shock = st.get(k + "_shock", False)
     look = st.get(k + "_look", (f, 0))
+    wink = st.get(k + "_wink", False)
     ex0, ey = H[0] + f * 5 * s, H[1] - 1 * s
     for sx in (-1, 1):
-        eye(rig, ex0 + sx * 12 * s, ey, s, look, st.get(k + "_blink"), shock, st.get(k + "_tired"),
-            spec["iris"], skin, sx if fem else 0)
+        eye(rig, ex0 + sx * 12 * s, ey, s, look, st.get(k + "_blink") or (wink and sx == f), shock,
+            st.get(k + "_tired") or style == "rosa" and not shock, spec["iris"], skin, sx if fem else 0)
         raise_ = (st.get(k + "_brow", 0.0) * 4 + (5 if shock else 0)) * s
         tilt = {"sad": -3, "angry": 3}.get(mood, 0) * s * sx
+        bc = hair if style in ("rico", "duke") else (170, 170, 178) if style == "rosa" else INK
         rig.line([(ex0 + sx * 12 * s - 7 * s, ey - 9 * s - raise_ + tilt * 0.5),
-                  (ex0 + sx * 12 * s + 7 * s, ey - 10 * s - raise_ - tilt * 0.5)], hair if not fem else INK, 3.2)
+                  (ex0 + sx * 12 * s + 7 * s, ey - 10 * s - raise_ - tilt * 0.5)], bc, 3.8 if style == "duke" else 3.2)
+    if style == "rosa":
+        for sx in (-1, 1):
+            rig.line([(ex0 + sx * 21 * s, ey - 2 * s), (ex0 + sx * 25 * s, ey + 1 * s)], darker(skin, 0.7), 1.6)
     rig.line([(H[0] + f * 6 * s, H[1] + 1 * s), (H[0] + f * 10 * s, H[1] + 13 * s), (H[0] + f * 3 * s, H[1] + 15 * s)],
              darker(skin, 0.55), 2.4)
-    if st.get("r_bigbeard") and not fem:
+    if st.get("r_bigbeard") and style == "rico":
         rig.blob([(H[0] + f * 2 * s, H[1] + 30 * s, 29 * s, 20 * s), (H[0], H[1] + 58 * s, 27 * s, 30 * s),
                   (H[0], H[1] + 92 * s, 17 * s, 24 * s)], hair, 3)
     human_mouth(rig, H[0] + f * 5 * s, H[1] + 25 * s, s, st.get(k + "_talk", 0.0), fem, mood)
-    if fem:
+    if style == "duke":
+        rig.blob([(H[0] + f * 5 * s - 7 * s, H[1] + 19 * s, 10 * s, 5 * s), (H[0] + f * 5 * s + 7 * s, H[1] + 19 * s, 10 * s, 5 * s)],
+                 hair, 2)
+    if style == "rosa":
+        for sx in (-1, 1):
+            ring(rig, ex0 + sx * 12 * s, ey, 10 * s, (120, 90, 60), 2.6)
+        rig.line([(ex0 - 2 * s, ey - 1 * s), (ex0 + 2 * s, ey - 1 * s)], (120, 90, 60), 2.4)
+        rig.blob([(H[0] - 4 * s, H[1] - 30 * s, 31 * s, 12 * s), (H[0] - 26 * s, H[1] - 14 * s, 9 * s, 14 * s),
+                  (H[0] + 26 * s, H[1] - 14 * s, 9 * s, 14 * s)], hair, 3)
+        if st.get("o_headset"):
+            rig.line([(H[0] - 32 * s, H[1] - 2 * s), (H[0] - 26 * s, H[1] - 38 * s), (H[0], H[1] - 48 * s),
+                      (H[0] + 26 * s, H[1] - 38 * s), (H[0] + 32 * s, H[1] - 2 * s)], (60, 220, 120), 5)
+            for sx in (-1, 1):
+                rig.ell(H[0] + sx * 33 * s, H[1] + 2 * s, 8 * s, 11 * s, (40, 40, 48), 3)
+            rig.line([(H[0] + f * 34 * s, H[1] + 10 * s), (H[0] + f * 20 * s, H[1] + 28 * s)], (40, 40, 48), 3)
+            rig.ell(H[0] + f * 18 * s, H[1] + 29 * s, 3.5 * s, 3.5 * s, (60, 220, 120), 2)
+    elif style == "nina":
         rig.blob([(H[0] - 12 * s + wind, H[1] - 30 * s, 22 * s, 11 * s), (H[0] + 14 * s + wind, H[1] - 32 * s, 22 * s, 11 * s),
                   (H[0] + 30 * s + wind, H[1] - 20 * s, 9 * s, 12 * s)], hair, 3)
         for sx in (-1, 1):
             rig.ell(H[0] + sx * 12 * s + wind, H[1] - 38 * s, 11 * s, 6 * s, (250, 214, 60), 2.5)
             rig.ell(H[0] + sx * 33 * s, H[1] + 16 * s, 5.5 * s, 7 * s, (250, 200, 60), 2)
             rig.ell(H[0] + sx * 33 * s, H[1] + 16 * s, 2.5 * s, 4 * s, skin, 0)
+    elif style == "duke":
+        rig.blob([(H[0], H[1] - 28 * s, 34 * s, 16 * s), (H[0] - f * 4 * s, H[1] - 38 * s, 30 * s, 12 * s)], top, 3)
+        rig.blob([(H[0] + f * 26 * s, H[1] - 18 * s, 22 * s, 6 * s)], (24, 30, 50), 3)
+        px, py = rig.T((H[0] - f * 2 * s, H[1] - 34 * s))
+        pn.star(px, py, 7 * s, (250, 210, 60), 2)
     else:
         rig.blob([(H[0] - 3 * s + wind, H[1] - 31 * s, 30 * s, 13 * s), (H[0] + f * 14 * s + wind * 2, H[1] - 39 * s, 19 * s, 11 * s),
                   (H[0] - 28 * s, H[1] - 15 * s, 6 * s, 13 * s), (H[0] + 28 * s, H[1] - 15 * s, 6 * s, 12 * s)], hair, 3)
-        if st.get("r_shades"):
-            for sx in (-1, 1):
-                cx = ex0 + sx * 12 * s
-                rig.poly([(cx - 10 * s, ey - 6 * s), (cx + 10 * s, ey - 6 * s), (cx + 9 * s, ey + 5 * s),
-                          (cx - 9 * s, ey + 5 * s)], (24, 24, 32), 2.5)
-            rig.line([(ex0 - 3 * s, ey - 4 * s), (ex0 + 3 * s, ey - 4 * s)], INK, 2.5)
+    if st.get(k + "_shades"):
+        for sx in (-1, 1):
+            cx = ex0 + sx * 12 * s
+            rig.poly([(cx - 10 * s, ey - 6 * s), (cx + 10 * s, ey - 6 * s), (cx + 9 * s, ey + 5 * s),
+                      (cx - 9 * s, ey + 5 * s)], (24, 24, 32), 2.5)
+        rig.line([(ex0 - 3 * s, ey - 4 * s), (ex0 + 3 * s, ey - 4 * s)], INK, 2.5)
 
     # arms (in front of the body)
     for i, sx in enumerate((-1, 1)):
         sh, el, wr = J["arm%d" % i]
         rig.chain([sh, el, wr], [12.5 * s, 10 * s, 7.5 * s], skin)
-        if not fem:
-            rig.chain([sh, lp(sh, el, 0.42)], [15 * s, 13.5 * s], top)
+        if spec["sleeves"] == "short":
+            rig.chain([sh, lp(sh, el, 0.42)], [15 * s * min(b, 1.1), 13.5 * s], top)
+        elif spec["sleeves"] == "long":
+            rig.chain([sh, el, lp(el, wr, 0.85)], [14.5 * s, 12 * s, 10 * s], top)
         else:
             rig.line([lp(sh, (C[0], C[1]), 0.15), (sh[0], sh[1] - 4 * s)], top, 4)
         dx, dy = wr[0] - el[0], wr[1] - el[1]
@@ -474,17 +551,13 @@ def draw_human(pn, spec, x, y, st, t, seated=False):
             donut(pn, px, py, 20 * s)
 
 
-def draw_rico(pn, st, t, seated=False):
-    draw_human(pn, RICO, st["r_x"], st["r_y"], st, t, seated)
-
-
-def draw_nina(pn, st, t, seated=False):
-    draw_human(pn, NINA, st["n_x"], st["n_y"], st, t, seated)
+def draw_cast(pn, st, t, seated=False):
+    for k in st["cast"]:
+        draw_human(pn, SPECS[k], st[k + "_x"], st[k + "_y"], st, t, seated and k in ("r", "n"))
 
 
 # --------------------------------------------------------------------------
 # Props
-# --------------------------------------------------------------------------
 def draw_car_body(pn, cx, gy, t, speed):
     spin = -t * speed / 40
     pn.blob([(cx - 40, gy - 92, 220, 52), (cx + 150, gy - 80, 90, 40), (cx - 190, gy - 84, 60, 44)], (54, 196, 210), 4)
@@ -739,21 +812,23 @@ ZOOM = {"wide": (1.0, 1.9), "ms2": (1.4, 2.35), "ms": (1.75, 2.9), "cu": (3.0, 4
 
 def shot_cam(name, st, heads, t):
     zi = 1 if SHORTS else 0
-    rh, nh = heads
     if name == "wide":
-        return (st["r_x"] + st["n_x"]) / 2, (440 if SHORTS else 385), ZOOM["wide"][zi]
-    if name == "track_r":
-        return st["r_x"] + 60, (440 if SHORTS else 385), ZOOM["wide"][zi]
+        xs = [st[k + "_x"] for k in st.get("wide_keys", st["cast"])]
+        return sum(xs) / len(xs), (440 if SHORTS else 385), ZOOM["wide"][zi]
+    if name.startswith("track_"):
+        return st[name[-1] + "_x"] + 60, (440 if SHORTS else 385), ZOOM["wide"][zi]
     if name == "fixed":
         cx, cy = st["cam_c"]
         return cx, cy + (55 if SHORTS else 0), ZOOM["wide"][zi] * st.get("cam_zk", 1.0)
     if name == "ms2":
-        return (rh[0] + nh[0]) / 2, (rh[1] + nh[1]) / 2 + (120 if SHORTS else 105), ZOOM["ms2"][zi]
-    if name in ("ms_r", "ms_n"):
-        h = rh if name == "ms_r" else nh
+        a, b = st.get("pair", ("r", "n"))
+        ha, hb = heads[a], heads[b]
+        return (ha[0] + hb[0]) / 2, (ha[1] + hb[1]) / 2 + (120 if SHORTS else 105), ZOOM["ms2"][zi]
+    if name.startswith("ms_"):
+        h = heads[name[-1]]
         return h[0], h[1] + (85 if SHORTS else 100), ZOOM["ms"][zi]
-    if name in ("cu_r", "cu_n"):
-        h = rh if name == "cu_r" else nh
+    if name.startswith("cu_"):
+        h = heads[name[-1]]
         return h[0], h[1] + (8 if SHORTS else 12), ZOOM["cu"][zi]
     if name == "car":
         return st["car_x"] - 10, st["gy"] - 200, ZOOM["car"][zi]
@@ -766,7 +841,6 @@ def shot_cam(name, st, heads, t):
 
 # --------------------------------------------------------------------------
 # Gags
-# --------------------------------------------------------------------------
 def fx_beard(st, lt, dur, ov):
     st["r_bigbeard"] = lt > 0.1
     if lt < 0.5:
@@ -841,7 +915,11 @@ STREET_WALK = dict(scene="street", r_x=420, n_x=680, r_legs="walk", n_legs="walk
 DAY = dict(scene="day", r_x=520, n_x=770)
 LYING = dict(scene="beach", r_x=1000, r_rot=math.pi / 2, r_pivot=(1000, GROUND), r_off=(0, -24), rock_x=880,
              board_x=810, r_mood="sad", n_x=1330, n_face=-1, n_look=(-1, 0.6))
-STORE = dict(scene="street", store=True, r_x=470, n_x=700)
+STORE = dict(scene="street", store=True, cast=["o", "n", "r"], r_x=380, n_x=580, o_x=780,
+             wide_keys=["r", "n", "o"])
+GRANNY = dict(scene="living", cast=["n", "o", "r"], r_x=430, o_x=700, n_x=960, o_headset=True, o_face=-1,
+              pair=("r", "o"))
+MALL = dict(scene="day", cast=["n", "d", "r"])
 
 
 def L(who, text, cam, state, **kw):
@@ -854,87 +932,115 @@ def A(dur, cam, state, **kw):
 
 EPISODES = [
     dict(num=1, title="Since Forever", beats=[
-        L("R", "Nina! I've waited for GTA Six my whole life!", ["wide", "ms_r"],
-          dict(LIVING, r_arms="up", r_bounce=True, r_brow=1)),
-        L("N", "I know. You grew a beard while waiting.", ["ms_n", "cu_n"], dict(LIVING, n_arms="hips", n_brow=1)),
-        L("R", "Worth it.", "cu_r", dict(LIVING), fx="beard", sfx=[(0.05, "poof")]),
-        L("R", "Vice City, here we come!", "wide",
+        L("r", "Nina! I've waited for GTA Six my whole life!", ["ms_r", "ms2"],
+          dict(LIVING, r_arms="up", r_bounce=True, r_brow=1), flash=[0.0]),
+        L("n", "I know. You grew a beard while waiting.", ["ms_n", "cu_n"], dict(LIVING, n_arms="hips", n_brow=1)),
+        L("r", "Worth it.", "cu_r", dict(LIVING), fx="beard", sfx=[(0.05, "poof")], punch=0.12),
+        L("r", "Vice City, here we come!", "wide",
           dict(BEACH_WALK, r_bigbeard=True, r_shades=True, r_arms="up"), whip=1, sfx=[(0, "whoosh")]),
-        L("N", "Babe. We live in Ohio.", ["ms2", "wide"],
-          dict(LIVING, r_bigbeard=True, r_mood="sad", snow=3), whip=-1, sfx=[(0, "whoosh"), (0.2, "wind")]),
-        A(1.0, ["ms_r", "cu_r"], dict(LIVING, r_bigbeard=True, r_mood="sad", snow=3, r_look=(0, 1))),
+        L("n", "Babe. We live in Ohio.", ["ms2", "ms_n"],
+          dict(LIVING, r_bigbeard=True, r_mood="sad", snow=3), whip=-1, sfx=[(0, "whoosh"), (0.3, "wind")],
+          punch=0.6),
+        A(0.8, "cu_r", dict(LIVING, r_bigbeard=True, r_mood="sad", snow=3, r_look=(0, 1)), dutch=-5),
     ]),
     dict(num=2, title="Driving Lessons", beats=[
-        L("R", "I'm practicing my driving for GTA Six.", ["car", "ms_r"],
+        L("r", "I'm practicing my driving for GTA Six.", ["car", "ms_r"],
           dict(CAR, speed=60, r_arms="drive", r_shades=True)),
-        L("N", "Babe, we're going five miles an hour.", "ms_n",
+        L("n", "Babe, we're going five miles an hour.", "ms_n",
           dict(CAR, speed=60, r_arms="drive", r_shades=True, n_mood="flat", n_tired=True, n_look=(1, 0))),
-        L("R", "In real life, I follow the rules.", ["ms_r", "cu_r"],
+        L("r", "In real life, I follow the rules.", ["ms_r", "cu_r"],
           dict(CAR, speed=60, r_arms="drive", r_shades=True)),
-        A(1.3, "car", dict(CAR, speed=1700, r_arms="drive", r_shades=True), fx="floor_it",
-          sfx=[(0, "vroom")], shake=[(0.05, 14)]),
-        L("R", "Nina! The speed limit!", ["ms_r", "car"], dict(CAR, speed=1700, r_arms="drive", r_shades=True),
-          fx="floor_it"),
-        L("N", "Now THAT'S how you play GTA!", "ms_n", dict(CAR, speed=1700, r_arms="drive", r_shades=True),
-          fx="floor_it"),
+        A(1.2, "car", dict(CAR, speed=1700, r_arms="drive", r_shades=True), fx="floor_it",
+          sfx=[(0, "vroom")], shake=[(0.05, 14)], flash=[0.05], dutch=5),
+        L("r", "Nina! The speed limit!", ["ms_r", "car"], dict(CAR, speed=1700, r_arms="drive", r_shades=True),
+          fx="floor_it", dutch=-4),
+        L("n", "Now THAT'S how you play GTA!", "ms_n", dict(CAR, speed=1700, r_arms="drive", r_shades=True),
+          fx="floor_it", punch=0.9),
     ]),
     dict(num=3, title="The Trailer", beats=[
-        L("N", "I've watched the GTA Six trailer a hundred times.", "wide", dict(STREET_WALK)),
-        L("R", "A hundred? Amateur.", ["ms2", "cu_r"], dict(scene="street", r_x=520, n_x=760, r_shades=True)),
-        A(1.3, "tv", dict(LIVING, r_x=420, n_x=660, tv_mode="count", tv_count=4806), fx="counter", whip=1,
-          sfx=[(0.1 + i * 0.18, "tick") for i in range(7)]),
-        L("R", "I'm almost at five thousand.", ["ms_r", "cu_r"],
+        L("n", "I've watched the GTA Six trailer a hundred times.", ["wide", "ms2"], dict(STREET_WALK)),
+        L("r", "A hundred? Amateur.", ["ms2", "cu_r"], dict(scene="street", r_x=520, n_x=760, r_shades=True),
+          punch=0.55),
+        A(1.2, "tv", dict(LIVING, r_x=420, n_x=660, tv_mode="count", tv_count=4806), fx="counter", whip=1,
+          sfx=[(0.1 + i * 0.16, "tick") for i in range(7)]),
+        L("r", "I'm almost at five thousand.", ["ms_r", "cu_r"],
           dict(LIVING, r_x=420, n_x=660, tv_mode="count", tv_count=4812, r_look=(1, 0))),
-        L("N", "Okay. We're going outside.", ["ms2", "wide"],
+        L("n", "Okay. We're going outside.", ["ms2", "ms_n"],
           dict(LIVING, r_x=420, n_x=660, tv_mode="count", tv_count=4812, n_arms="point", n_mood="angry",
-               r_shock=True)),
-        L("R", "Ahh! The sun! It burns!", "fixed",
+               r_shock=True), punch=0.2),
+        L("r", "Ahh! The sun! It burns!", "fixed",
           dict(scene="beach", cam_c=(700, 385), r_x=760, r_vx=-340, r_legs="run", r_face=-1, r_arms="up",
-               r_shock=True, n_x=900, n_face=-1, n_arms="hips", n_mood="flat"), whip=1, sfx=[(0, "whoosh")]),
+               r_shock=True, n_x=900, n_face=-1, n_arms="hips", n_mood="flat"), whip=1, sfx=[(0, "whoosh")],
+          dutch=4),
     ]),
     dict(num=4, title="Wanted Level", beats=[
-        L("N", "Mmm. The last donut.", "wide",
-          dict(DAY, r_x=300, n_x=540, r_legs="walk", n_legs="walk", r_vx=90, n_vx=90, r_face=1, n_face=1,
-               n_hold="donut", n_arms="hold")),
-        L("R", "That was MY donut! That's a two-star crime!", ["ms2", "ms_r"],
-          dict(DAY, n_hold="donut", n_arms="hold", r_arms="point", r_mood="angry", r_brow=1, stars=2),
+        L("n", "Mmm. The last donut.", "wide",
+          dict(MALL, r_x=300, n_x=540, d_x=1500, r_legs="walk", n_legs="walk", r_vx=90, n_vx=90, r_face=1,
+               n_face=1, n_hold="donut", n_arms="hold", wide_keys=["r", "n"])),
+        L("r", "That was MY donut! That's a two-star crime!", ["ms2", "ms_r"],
+          dict(MALL, d_x=1500, n_hold="donut", n_arms="hold", r_arms="point", r_mood="angry", r_brow=1, stars=2),
           sfx=[(0.35, "ding"), (0.5, "ding")]),
-        A(1.5, "wide", dict(DAY, n_hold="donut", n_arms="hold", stars=2), fx="gull",
-          sfx=[(0.2, "whoosh"), (0.55, "squawk")], shake=[(0.6, 8)]),
-        L("N", "And that bird just got five stars.", ["ms_n", "cu_n"],
-          dict(DAY, n_mood="flat", n_arms="shrug", stars=5), sfx=[(0, "ding"), (0.15, "ding"), (0.3, "ding")]),
-        L("R", "Respect.", "cu_r", dict(DAY, r_arms="salute", r_brow=1, stars=5)),
+        L("d", "Did somebody say... crime?", ["wide", "ms_d"],
+          dict(MALL, r_x=420, n_x=640, d_x=1160, d_vx=-180, d_vt=0.9, d_legs="walk", n_hold="donut",
+               n_arms="hold", r_shock=True, n_shock=True, stars=2, d_shades=True), punch=1.3),
+        A(1.5, "wide", dict(MALL, r_x=420, n_x=640, d_x=1000, n_hold="donut", n_arms="hold", stars=2,
+                            d_shades=True, wide_keys=["r", "n"]),
+          fx="gull", sfx=[(0.2, "whoosh"), (0.55, "squawk")], shake=[(0.6, 8)]),
+        L("d", "That bird... is going DOWN.", ["ms_d", "cu_d"],
+          dict(MALL, r_x=420, n_x=640, d_x=1000, stars=5, d_mood="angry", d_shades=True, d_arms="point",
+               d_face=1, d_look=(1, -1)), sfx=[(0, "ding"), (0.15, "ding"), (0.3, "ding")], dutch=5),
     ]),
     dict(num=5, title="Wasted", beats=[
-        L("R", "Watch this! Real life GTA stunt!", "track_r",
+        L("r", "Watch this! Real life GTA stunt!", "track_r",
           dict(scene="beach", r_x=300, r_vx=170, r_legs="skate", r_arms="balance", r_face=1, skate=True,
                n_x=200, n_face=1, n_arms="hips", n_mood="flat")),
         A(1.5, "fixed", dict(scene="beach", cam_c=(830, 385), r_x0=680, rock_x=880, r_legs="skate",
                               r_arms="balance", r_face=1, skate=True, n_x=430, n_face=1), fx="crash",
-          sfx=[(0.3, "bonk"), (0.85, "thud")], shake=[(0.85, 18)]),
-        L("R", "Wasted.", ["ms_r", "cu_r"], dict(LYING, gray=True, skate=True)),
-        L("N", "Babe, you scraped your knee.", ["ms_n", "ms2"],
+          sfx=[(0.3, "bonk"), (0.85, "thud")], shake=[(0.85, 18)], flash=[0.85]),
+        L("r", "Wasted.", ["ms_r", "cu_r"], dict(LYING, gray=True, skate=True), punch=0.1, dutch=-6),
+        L("n", "Babe, you scraped your knee.", ["ms_n", "ms2"],
           dict(LYING, skate=True, n_x=1260, n_arms="hips", n_mood="flat")),
-        L("R", "Respawn me at the hospital.", "cu_r", dict(LYING, skate=True)),
+        L("r", "Respawn me at the hospital.", "cu_r", dict(LYING, skate=True)),
     ]),
     dict(num=6, title="Release Night", beats=[
-        L("R", "First in line, all night long! We're ready!", ["wide", "ms2"],
-          dict(STORE, r_arms="up", r_bounce=True, n_tired=True, n_face=-1)),
-        L("N", "Babe... read the sign.", "ms_n", dict(STORE, n_tired=True, n_face=1, n_arms="point")),
-        A(1.4, "sign", dict(STORE), sfx=[(0.1, "trombone")]),
-        A(1.1, "tv", dict(LIVING), fx="download", whip=1, sfx=[(0, "whoosh"), (0.5, "blip")]),
-        L("R", "Nine hours?!", "cu_r", dict(LIVING, tv_mode="download", r_shock=True, r_arms="up"),
-          shake=[(0.05, 10)]),
-        L("N", "Relax. We're professionals at waiting.", ["ms2", "wide"],
-          dict(LIVING, tv_mode="download", n_arms="hips", r_mood="sad")),
+        L("r", "First in line, all night long! We're ready!", ["wide", "ms2"],
+          dict(STORE, r_arms="up", r_bounce=True, n_tired=True, n_face=1, o_face=-1), flash=[0.0]),
+        L("o", "Sorry, sweetie. I've been here since Tuesday.", ["ms2", "ms_o"],
+          dict(STORE, o_face=-1, r_shock=True, n_tired=True, n_face=1, r_look=(1, 0)), punch=1.6),
+        L("n", "Grandma... read the sign.", ["ms_n", "ms2"],
+          dict(STORE, n_face=1, n_arms="point", o_face=-1, pair=("n", "o"))),
+        A(1.2, "sign", dict(STORE), sfx=[(0.05, "trombone")]),
+        L("o", "Oh, I pre-loaded it at home.", "cu_o", dict(STORE, o_face=-1, o_wink=True, o_shades=False)),
+        L("r", "Grandma... you're my hero.", "cu_r", dict(STORE, r_brow=1, r_look=(1, -0.3)), dutch=4),
+    ]),
+    dict(num=7, title="Pro Gamer Granny", beats=[
+        L("r", "Grandma, GTA is way too hard for you.", ["wide", "ms2"], dict(GRANNY, r_arms="hips")),
+        L("o", "Kid, I was doing getaways before you were born.", ["ms_o", "cu_o"],
+          dict(GRANNY, o_mood="angry", o_brow=1), punch=2.0),
+        L("n", "In the game... right, Grandma?", "ms_n", dict(GRANNY, n_face=-1, n_mood="flat", n_brow=1)),
+        A(1.1, "cu_o", dict(GRANNY, o_shades=True, o_wink=False), sfx=[(0.0, "siren")], punch=0.0, dutch=6),
+        L("r", "GRANDMA?!", "cu_r", dict(GRANNY, r_shock=True, r_arms="up"), flash=[0.0], shake=[(0.0, 10)]),
+    ]),
+    dict(num=8, title="Mall Cop", beats=[
+        L("r", "Real life GTA mode: activated!", "track_r",
+          dict(MALL, r_x=150, r_vx=320, r_legs="run", r_face=1, r_shades=True, n_x=-400, d_x=2000)),
+        L("d", "Sir. Walking only.", ["ms2", "ms_d"],
+          dict(MALL, r_x=820, d_x=1040, d_face=-1, d_arms="stop", d_shades=True, r_shock=True, r_face=1,
+               n_x=-400, pair=("r", "d")), punch=0.4),
+        A(1.6, "fixed", dict(MALL, cam_c=(960, 385), r_x=820, r_vx=60, r_legs="walk", r_wspd=0.35, r_face=1,
+                             r_shades=True, d_x=1040, d_face=-1, d_shades=True, d_arms="hips", n_x=-400,
+                             d_look=(1, 0)), sfx=[(0.2 + i * 0.4, "tick") for i in range(4)]),
+        L("n", "Slowest getaway in history.", "ms_n", dict(MALL, n_x=560, n_face=1, n_mood="flat", r_x=960, d_x=1180)),
+        L("d", "...I'll allow it.", "cu_d", dict(MALL, n_x=560, r_x=960, d_x=1180, d_face=-1, d_shades=True)),
     ]),
 ]
 
-GAP, LEAD = 0.16, 0.06
+GAP, LEAD = 0.14, 0.06
+OUTRO = 0.9
 
 
 def build_timeline(ep):
-    t = TITLE_DUR
+    t = 0.0
     segs = []
     for b in ep["beats"]:
         s = dict(b, start=t)
@@ -943,28 +1049,79 @@ def build_timeline(ep):
             s.update(clip=clip, env=base.mouth_envelope(clip), dur=len(clip) / SR + GAP + LEAD)
         segs.append(s)
         t += s["dur"]
-    total = t + 0.3
+    last = segs[-1]
+    cam = last["cam"] if isinstance(last["cam"], str) else last["cam"][1]
+    ost = dict(last["state"])
+    for k in ost.get("cast", ["n", "r"]):
+        if not ost.get(k + "_rot"):
+            ost[k + "_arms"] = "wave"
+    for key in ("r_vx", "n_vx", "d_vx"):
+        ost.pop(key, None)
+    segs.append(dict(type="outro", dur=OUTRO, cam=cam, state=ost, start=t))
+    total = t + OUTRO
     if total > MAX_LEN:
         raise SystemExit(f"Episode {ep['num']} is {total:.2f}s — over the {MAX_LEN}s limit")
     return segs, total
 
 
+def sound(name, dur=1.0):
+    t = np.arange(int(dur * SR)) / SR
+    if name == "siren":
+        tt = np.arange(int(1.1 * SR)) / SR
+        f = np.where((tt * 3) % 1 < 0.5, 960, 720)
+        ph = np.cumsum(f) / SR
+        return np.sin(2 * np.pi * ph) * 0.25 * np.minimum(1, tt * 10)
+    return sfx(name, dur)
+
+
+def music(total):
+    """Light synth beat (100 BPM) — background bed."""
+    n = int(total * SR) + SR
+    out = np.zeros(n)
+    beat = 0.6
+    chords = [(220.0, 261.6, 329.6), (174.6, 220.0, 261.6), (130.8, 164.8, 196.0), (196.0, 246.9, 293.7)]
+    rng = np.random.default_rng(1)
+    for b in range(int(total / beat) + 2):
+        i = int(b * beat * SR)
+        tt = np.arange(int(0.25 * SR)) / SR
+        kick = np.sin(2 * np.pi * (50 + 90 * np.exp(-tt * 30)) * tt) * np.exp(-tt * 14) * 0.7
+        out[i:i + len(kick)] += kick[: max(0, n - i)]
+        j = int((b + 0.5) * beat * SR)
+        th = np.arange(int(0.05 * SR)) / SR
+        hat = rng.standard_normal(len(th)) * np.exp(-th * 70) * 0.12
+        out[j:j + len(hat)] += hat[: max(0, n - j)]
+        ch = chords[(b // 4) % 4]
+        tb = np.arange(int(beat * SR)) / SR
+        ph = ch[0] / 2 * tb
+        bass = (2 * (ph % 1) - 1) * 0.16 * np.exp(-tb * 3)
+        pad = sum(np.sin(2 * np.pi * f * tb) for f in ch) * 0.035
+        seg = bass + pad
+        out[i:i + len(seg)] += seg[: max(0, n - i)]
+    return out[: int(total * SR)]
+
+
 def mix_audio(segs, total):
-    out = np.zeros(int((total + 3) * SR))
+    n = int(total * SR)
+    speech = np.zeros(n + 3 * SR)
+    fx = np.zeros(n + 3 * SR)
 
-    def place(sig, at, gain=1.0):
+    def place(buf, sig, at, gain=1.0):
         i = int(at * SR)
-        out[i:i + len(sig)] += sig[: len(out) - i] * gain
+        buf[i:i + len(sig)] += sig[: len(buf) - i] * gain
 
-    place(sfx("intro"), 0.0, 0.8)
     for s in segs:
         if s["type"] == "line":
-            place(s["clip"], s["start"] + LEAD, 1.0)
-        if s["state"].get("car"):
-            place(sfx("engine", s["dur"]), s["start"], 0.35)
+            place(speech, s["clip"], s["start"] + LEAD, 1.0)
+        if s["state"].get("car") and s["type"] != "outro":
+            place(fx, sfx("engine", s["dur"]), s["start"], 0.35)
         for off, name in s.get("sfx", []):
-            place(sfx(name, 1.2 if name == "vroom" else 1.0), s["start"] + off, 0.5)
-    out = out[: int(total * SR)]
+            place(fx, sound(name, 1.2 if name == "vroom" else 1.0), s["start"] + off, 0.5)
+    place(fx, sfx("ding"), total - OUTRO + 0.05, 0.4)
+    speech, fx = speech[:n], fx[:n]
+    env = np.convolve(np.abs(speech), np.ones(2000) / 2000, mode="same")
+    duck = np.where(env > 0.01, 0.35, 1.0)
+    duck = np.convolve(duck, np.ones(1500) / 1500, mode="same")
+    out = speech + fx + music(total) * 0.5 * duck
     out = out / max(1e-6, np.abs(out).max()) * 0.9
     return (out * 32767).astype(np.int16)
 
@@ -972,69 +1129,81 @@ def mix_audio(segs, total):
 # --------------------------------------------------------------------------
 # Frame rendering
 # --------------------------------------------------------------------------
-def title_card(ep, t):
-    w, h = base.W, base.H
-    img = Image.new("RGB", (w * SS, h * SS))
-    pn = Pen(img, Cam(640, 360, 1.0))
-    top = 360 - h / 2
-    for i, c in enumerate([(40, 20, 80), (110, 40, 120), (230, 90, 150), (255, 150, 120)]):
-        pn.rect(-1000, top + i * h * 0.17, 3000, 3000, c, 0)
-    pn.ellipse(640, 360 + h * 0.18, 150, 150, (255, 226, 110), 0)
-    for k in range(5):
-        yy = 360 + h * 0.18 + 30 + k * 26
-        pn.rect(400, yy, 880, yy + 9, (255, 150, 120), 0)
-    pn.rect(-1000, 360 + h * 0.27, 3000, 3000, (40, 20, 70), 0)
-    for i in range(-2, 5):
-        palm(pn, 640 + i * 300 - 450, 360 + h * 0.28, 260 if not SHORTS else 380, math.sin(t * 2 + i) * 6,
-             dark=(30, 14, 50))
-    cam2 = Cam(640, 360, 1.75) if SHORTS else Cam(640, 250, 0.6)
-    pn2 = Pen(img, cam2)
-    st = dict(r_x=530, n_x=760, r_y=660, n_y=660, r_arms="up", n_arms="up", r_shades=True,
-              r_talk=0.6, n_talk=0.6, r_look=(0.5, 0.3), n_look=(-0.5, 0.3), r_face=1, n_face=-1)
-    draw_nina(pn2, st, t)
-    draw_rico(pn2, st, t)
-    img = img.resize((w, h), Image.LANCZOS)
-    d = ImageDraw.Draw(img)
-    pop = 0.6 + 0.4 * min(1.0, t / 0.25)
-    if SHORTS:
-        d.text((w / 2, 250), "RICO & NINA", font=base.font(int(118 * pop)), fill=(255, 236, 120), anchor="mm",
-               stroke_width=9, stroke_fill=INK)
-        d.text((w / 2, 360), "waiting for GTA VI", font=base.font(56), fill=(255, 140, 210), anchor="mm",
-               stroke_width=6, stroke_fill=INK)
-        d.text((w / 2, 450), f"Ep.{ep['num']}  {ep['title']}", font=base.font(56), fill=(255, 255, 255),
-               anchor="mm", stroke_width=5, stroke_fill=INK)
-    else:
-        d.text((w / 2, 90), "RICO & NINA", font=base.font(int(92 * pop)), fill=(255, 236, 120), anchor="mm",
-               stroke_width=7, stroke_fill=INK)
-        d.text((w / 2, 160), "waiting for GTA VI", font=base.font(36), fill=(255, 140, 210), anchor="mm",
-               stroke_width=4, stroke_fill=INK)
-        d.text((w / 2, 210), f"Episode {ep['num']}:  {ep['title']}", font=base.font(34), fill=(255, 255, 255),
-               anchor="mm", stroke_width=4, stroke_fill=INK)
-    return img
+def wrap(d, words, fnt, maxw):
+    lines, cur = [], []
+    for i, wd in enumerate(words):
+        trial = " ".join(w for _, w in cur + [(i, wd)])
+        if cur and d.textlength(trial, font=fnt) > maxw:
+            lines.append(cur)
+            cur = []
+        cur.append((i, wd))
+    lines.append(cur)
+    return lines
 
 
-def caption(img, who, text):
+def caption(img, who, text, prog):
+    """Big word-by-word captions (current word highlighted)."""
     d = ImageDraw.Draw(img)
-    name = "RICO" if who == "R" else "NINA"
     w, h = base.W, base.H
-    if SHORTS:
-        lines, cur = [], ""
-        for wd in text.split():
-            trial = (cur + " " + wd).strip()
-            if d.textlength(trial, font=base.font(58)) > w - 140 and cur:
-                lines.append(cur)
-                cur = wd
-            else:
-                cur = trial
-        lines.append(cur)
-        y0 = 1420
-        d.text((w / 2, y0), name, font=base.font(46), fill=(255, 140, 210), anchor="mm", stroke_width=5, stroke_fill=INK)
-        for i, ln in enumerate(lines):
-            d.text((w / 2, y0 + 70 + i * 70), ln, font=base.font(58), fill=(255, 255, 255), anchor="mm",
-                   stroke_width=6, stroke_fill=INK)
-    else:
-        d.text((w / 2, h - 44), f"{name}: {text}", font=base.font(30), fill=(255, 255, 255), anchor="mm",
+    words = text.split()
+    weights = np.cumsum([len(x) + 2 for x in words])
+    cur = int(np.searchsorted(weights / weights[-1], min(0.999, max(0.0, prog)), side="right"))
+    size = 66 if SHORTS else 36
+    fnt = base.font(size)
+    lines = wrap(d, words, fnt, w - (120 if SHORTS else 200))
+    y0 = 1330 if SHORTS else h - 40 - (len(lines) - 1) * 44
+    lh = 82 if SHORTS else 44
+    d.text((w / 2, y0 - (64 if SHORTS else 40)), NAMES[who], font=base.font(44 if SHORTS else 24),
+           fill=NAME_COL[who], anchor="mm", stroke_width=5 if SHORTS else 3, stroke_fill=INK)
+    for li, line in enumerate(lines):
+        full = " ".join(wd for _, wd in line)
+        x = w / 2 - d.textlength(full, font=fnt) / 2
+        for i, wd in line:
+            col = (255, 230, 60) if i == cur else (255, 255, 255)
+            d.text((x, y0 + li * lh), wd, font=fnt, fill=col, anchor="lm", stroke_width=7 if SHORTS else 4,
+                   stroke_fill=INK)
+            x += d.textlength(wd + " ", font=fnt)
+
+
+def badge(img, ep, t):
+    if t > 2.4:
+        return
+    d = ImageDraw.Draw(img)
+    k = ease(min(1, t / 0.3)) * (1 - ease(max(0, (t - 2.1) / 0.3)))
+    x = -420 + 440 * k if SHORTS else -320 + 340 * k
+    y = 150 if SHORTS else 22
+    s = 1.0 if SHORTS else 0.62
+    d.rounded_rectangle([x, y, x + 400 * s, y + 116 * s], radius=22 * s, fill=(40, 20, 70), outline=INK, width=4)
+    d.text((x + 20 * s, y + 38 * s), "RICO & NINA", font=base.font(int(46 * s)), fill=(255, 236, 120), anchor="lm",
+           stroke_width=3, stroke_fill=INK)
+    d.text((x + 20 * s, y + 88 * s), f"EP.{ep['num']}  {ep['title'].upper()}", font=base.font(int(28 * s)),
+           fill=(255, 140, 210), anchor="lm")
+
+
+def follow_card(img, ep, lt):
+    d = ImageDraw.Draw(img)
+    w, h = base.W, base.H
+    k = ease(min(1, lt / 0.25))
+    pulse = 1 + 0.06 * math.sin(lt * 16)
+    s = (1.0 if SHORTS else 0.65) * k * pulse
+    cy = 1500 if SHORTS else h * 0.78
+    bw, bh = 560 * s, 130 * s
+    d.rounded_rectangle([w / 2 - bw / 2, cy - bh / 2, w / 2 + bw / 2, cy + bh / 2], radius=bh / 2,
+                        fill=(230, 30, 50), outline=INK, width=5)
+    if s > 0.2:
+        d.text((w / 2, cy), "FOLLOW for more!", font=base.font(int(54 * s)), fill=(255, 255, 255), anchor="mm",
+               stroke_width=3, stroke_fill=INK)
+        nxt = "next: Ep." + str(ep["num"] % len(EPISODES) + 1)
+        d.text((w / 2, cy + bh / 2 + 44 * s), nxt, font=base.font(int(40 * s)), fill=(255, 236, 120), anchor="mm",
                stroke_width=4, stroke_fill=INK)
+
+
+def dutch(img, deg):
+    w, h = img.size
+    sc = math.cos(math.radians(abs(deg))) + max(w / h, h / w) * math.sin(math.radians(abs(deg))) + 0.01
+    big = img.resize((int(w * sc), int(h * sc)), Image.BICUBIC).rotate(deg, resample=Image.BICUBIC)
+    x0, y0 = (big.width - w) // 2, (big.height - h) // 2
+    return big.crop((x0, y0, x0 + w, y0 + h))
 
 
 def hud_stars(img, n, lt):
@@ -1065,8 +1234,6 @@ def motion_blur(img, px):
 
 def render_frame(ep, segs, fi):
     t = fi / FPS
-    if t < TITLE_DUR:
-        return title_card(ep, t)
     seg = segs[-1]
     for s in segs:
         if s["start"] <= t < s["start"] + s["dur"]:
@@ -1074,36 +1241,46 @@ def render_frame(ep, segs, fi):
             break
     lt = t - seg["start"]
     dur = seg["dur"]
-    st = dict(r_x=520, n_x=770, r_y=GROUND, n_y=GROUND)
+    st = {}
+    for k, x in DEFAULT_X.items():
+        st[k + "_x"], st[k + "_y"] = x, GROUND
+    st["cast"] = ["n", "r"]
     st.update(seg["state"])
-    st["r_blink"] = (t * 1000) % 3100 < 110
-    st["n_blink"] = (t * 1000 + 1500) % 3700 < 110
-    st["r_x"] += st.get("r_vx", 0) * lt
-    st["n_x"] += st.get("n_vx", 0) * lt
+    for k in st["cast"]:
+        st[k + "_blink"] = (t * 1000 + ord(k) * 37) % (2900 + ord(k) * 5) < 110
+        vt = st.get(k + "_vt", 99)
+        st[k + "_x"] += st.get(k + "_vx", 0) * min(lt, vt)
+        if lt > vt:
+            st[k + "_legs"] = "stand"
     if st.get("car"):
         st["scroll"] = st.get("speed", 0) * t
         bump = math.sin(t * 22) * (1.5 if st.get("speed", 0) < 200 else 4)
         st["r_x"], st["n_x"] = st["car_x"] + 40, st["car_x"] - 110
         st["r_y"] = st["n_y"] = st["gy"] + 190 + bump
+    prog = 0.0
     if seg["type"] == "line":
         idx = int((lt - LEAD) * FPS)
         level = seg["env"][idx] if 0 <= idx < len(seg["env"]) else 0.0
-        st["r_talk" if seg["who"] == "R" else "n_talk"] = level
+        st[seg["who"] + "_talk"] = level
+        st[seg["who"] + "_speaking"] = True
+        prog = (lt - LEAD) / (len(seg["clip"]) / SR)
     overlays = []
     if seg.get("fx"):
         FX[seg["fx"]](st, lt, dur, overlays)
     if st.get("skate") and "board_x" not in st:
         st["board_x"] = st["r_x"]
 
-    # ---- camera: move between shots + handheld drift + shake + whip
-    heads = (head_world(RICO, st["r_x"], st["r_y"], st, t), head_world(NINA, st["n_x"], st["n_y"], st, t))
+    # ---- camera: move between shots + handheld drift + shake + whip + crash zoom
+    heads = {k: head_world(SPECS[k], st[k + "_x"], st[k + "_y"], st, t) for k in SPECS}
     cam = seg["cam"]
     a_name, b_name = (cam, cam) if isinstance(cam, str) else cam
     ca, cb = shot_cam(a_name, st, heads, t), shot_cam(b_name, st, heads, t)
     k = ease(lt / dur)
     cx, cy, z = lerp(ca[0], cb[0], k), lerp(ca[1], cb[1], k), lerp(ca[2], cb[2], k)
     if a_name == b_name:
-        z *= 1 + 0.05 * (lt / dur)
+        z *= 1 + 0.06 * (lt / dur)
+    if seg.get("punch") is not None and lt >= seg["punch"]:
+        z *= 1 + 0.3 * ease((lt - seg["punch"]) / 0.12)
     cx += (math.sin(t * 0.9) * 5 + math.sin(t * 2.3) * 2) / z
     cy += (math.cos(t * 1.1) * 4) / z
     shake = st.get("shake", 0.0)
@@ -1115,24 +1292,22 @@ def render_frame(ep, segs, fi):
         cx += rnd.uniform(-1, 1) * shake / z
         cy += rnd.uniform(-1, 1) * shake / z
     blur = 0
-    if seg.get("whip") and lt < 0.25:
-        kk = 1 - ease(lt / 0.25)
+    if seg.get("whip") and lt < 0.22:
+        kk = 1 - ease(lt / 0.22)
         cx += seg["whip"] * kk * 650 / z
         blur = kk * (180 if SHORTS else 140)
 
     img = Image.new("RGB", (base.W * SS, base.H * SS))
-    main_cam = Cam(cx, cy, z)
 
     def layer(par):
         return Pen(img, Cam(640 + (cx - 640) * par, 400 + (cy - 400) * par, 1 + (z - 1) * par))
 
     BACKGROUNDS[st["scene"]](layer, t, st)
-    pn = Pen(img, main_cam)
+    pn = Pen(img, Cam(cx, cy, z))
     seated = bool(st.get("car"))
     if st.get("skate"):
         skateboard(pn, st["board_x"], GROUND, 0)
-    draw_nina(pn, st, t, seated)
-    draw_rico(pn, st, t, seated)
+    draw_cast(pn, st, t, seated)
     if seated:
         draw_car_body(pn, st["car_x"], st["r_y"] - 190, t, st.get("speed", 0))
     for o in overlays:
@@ -1141,12 +1316,20 @@ def render_frame(ep, segs, fi):
     if st.get("gray"):
         g = ImageOps.grayscale(img).convert("RGB")
         img = Image.blend(g, Image.new("RGB", img.size, (60, 50, 50)), 0.15)
+    if seg.get("dutch"):
+        img = dutch(img, seg["dutch"] * ease(min(1, lt / 0.2)))
     if blur:
         img = motion_blur(img, blur)
+    for tf in seg.get("flash", []):
+        if 0 <= lt - tf < 0.16:
+            img = Image.blend(img, Image.new("RGB", img.size, (255, 255, 255)), 0.75 * (1 - (lt - tf) / 0.16))
     if st.get("stars"):
         hud_stars(img, st["stars"], lt)
+    badge(img, ep, t)
     if seg["type"] == "line":
-        caption(img, seg["who"], seg["text"])
+        caption(img, seg["who"], seg["text"], prog)
+    if seg["type"] == "outro":
+        follow_card(img, ep, lt)
     return img
 
 
@@ -1155,7 +1338,7 @@ def render_episode(ep):
     print(f"Episode {ep['num']}: {ep['title']}")
     segs, total = build_timeline(ep)
     print(f"  length {total:.2f}s")
-    wav_path = os.path.join(base.CACHE, f"rn2_ep{ep['num']}.wav")
+    wav_path = os.path.join(base.CACHE, f"rn3_ep{ep['num']}.wav")
     with wave.open(wav_path, "wb") as wf:
         wf.setnchannels(1)
         wf.setsampwidth(2)
@@ -1183,7 +1366,7 @@ def main():
     want = {int(a) for a in args if a.isdigit()}
     outs = [render_episode(ep) for ep in EPISODES if not want or ep["num"] in want]
     if len(outs) > 1:
-        lst = os.path.join(base.CACHE, "rn2_concat.txt")
+        lst = os.path.join(base.CACHE, "rn3_concat.txt")
         with open(lst, "w") as f:
             f.writelines(f"file '{o}'\n" for o in outs)
         full = os.path.join(OUT_DIR, "rico_and_nina_all_episodes" + ("_short" if SHORTS else "") + ".mp4")
