@@ -12,7 +12,8 @@ Scene is modelled in 3D (X right, Y up, Z toward camera) and drawn with an
 oblique projection, so circles become ellipses through plain affine maps.
 
 Usage:
-    python3 make_cucumber.py            # render output/cucumber_slicing_short.mp4
+    python3 make_cucumber.py            # Arabic  -> output/cucumber_slicing_short_ar.mp4
+    python3 make_cucumber.py --en       # English -> output/cucumber_slicing_short_en.mp4
     python3 make_cucumber.py --preview  # write a few still frames to output/preview
 """
 import math
@@ -60,13 +61,15 @@ RH = R * NRM                   # half height of the cucumber band on screen
 DXT = KX * KY * R / NRM        # x shift of the cut-ellipse top point
 
 # ---------------------------------------------------------------- timing
-T_FIRST = 1.5
-_iv = np.geomspace(0.80, 0.30, N_CUTS - 1)
+T_FIRST = 1.2
+_iv = np.geomspace(0.55, 0.22, N_CUTS - 1)
 T_CUT = [T_FIRST] + list(T_FIRST + np.cumsum(_iv))
 T_LAST = T_CUT[-1]
-T_PULL0, T_PULL1 = T_LAST + 0.55, T_LAST + 1.75
+T_PULL0, T_PULL1 = T_LAST + 0.45, T_LAST + 1.45
 T_BANNER = T_PULL1 - 0.25
-DUR = T_PULL1 + 2.4
+DUR = T_PULL1 + 2.1
+assert DUR <= 14.0, DUR
+LANG = "en" if "--en" in sys.argv else "ar"
 H_UP = 2 * R + 115             # knife edge height between chops
 HOLD = 0.035
 
@@ -441,7 +444,7 @@ def _paste_clip(dst, im, x, y):
 def knife_state(t):
     x = CUTS[0]
     if t < T_CUT[0] - 0.3:
-        p = clamp(t / 1.1)
+        p = clamp(t / 0.85)
         y = H_UP + 900 * (1 - ease_out(p)) + 8 * math.sin(t * 5)
         return CUTS[0], y
     for i, tc in enumerate(T_CUT):
@@ -543,16 +546,27 @@ class Renderer:
         self.e_cuc = emoji("🥒", 78)
         self.e_knife = emoji("🔪", 70)
         self.e_think = emoji("🤔", 66)
-        self.label = hstack([text_img("عدد القطع", self.f_label, (255, 255, 255)), self.e_knife], 10)
-        self.hook = hstack([self.e_think, text_img("كم قطعة بتطلع من خيارة وحدة؟", self.f_hook, (255, 255, 255),
-                                                   stroke=3, stroke_fill=(20, 20, 20))], 12)
+        white, gold = (255, 255, 255), (255, 226, 70)
+        big = dict(stroke=6, stroke_fill=(30, 30, 30))
+        thin = dict(stroke=3, stroke_fill=(20, 20, 20))
+        cuc = self.e_cuc.resize((130, 130), Image.LANCZOS)
+        if LANG == "en":
+            f_lab = ImageFont.truetype(FONT_LAT, 70)
+            f_hk = ImageFont.truetype(FONT_LAT, 60)
+            f_bn = ImageFont.truetype(FONT_LAT, 130)
+            f_sb = ImageFont.truetype(FONT_LAT, 58)
+            self.label = hstack([self.e_knife, text_img("PIECES CUT", f_lab, white)], 10)
+            self.hook = hstack([text_img("How many slices in one cucumber?", f_hk, white, **thin), self.e_think], 12)
+            self.banner = hstack([text_img(f"{N_CUTS} SLICES!", f_bn, gold, **big), cuc], -20)
+            self.sub = text_img("From just ONE cucumber", f_sb, white, **thin)
+        else:
+            self.label = hstack([text_img("عدد القطع", self.f_label, white), self.e_knife], 10)
+            self.hook = hstack([self.e_think, text_img("كم قطعة بتطلع من خيارة وحدة؟", self.f_hook, white, **thin)], 12)
+            self.banner = hstack([cuc, text_img("!", self.f_ban_num, gold, **big),
+                                  text_img("قطعة", self.f_ban, gold, **big),
+                                  text_img(str(N_CUTS), self.f_ban_num, gold, **big)], -36)
+            self.sub = text_img("من خيارة وحدة بس", self.f_sub, white, **thin)
         self.num_cache = {}
-        self.banner = hstack([self.e_cuc.resize((130, 130), Image.LANCZOS),
-                              text_img("!", self.f_ban_num, (255, 226, 70), stroke=6, stroke_fill=(30, 30, 30)),
-                              text_img("قطعة", self.f_ban, (255, 226, 70), stroke=6, stroke_fill=(30, 30, 30)),
-                              text_img(str(N_CUTS), self.f_ban_num, (255, 226, 70), stroke=6, stroke_fill=(30, 30, 30))], -36)
-        self.sub = text_img("من خيارة وحدة بس 😋".replace(" 😋", ""), self.f_sub, (255, 255, 255),
-                            stroke=3, stroke_fill=(20, 20, 20))
         self.precompute_camera()
 
     # -------------------------------------------------- camera
@@ -564,7 +578,7 @@ class Renderer:
             t = f / FPS
             kx, _ = knife_state(min(t, T_LAST + 0.3))
             if t < T_CUT[0] - 0.3:
-                z = lerp(1.95, 1.6, ease(t / 1.2))
+                z = lerp(1.95, 1.6, ease(t / 0.9))
             else:
                 z = 1.6
             pz = ease((t - T_PULL0) / (T_PULL1 - T_PULL0))
@@ -800,8 +814,8 @@ class Renderer:
 
     def draw_ui(self, frame, t, k):
         # hook line
-        if t < 2.6:
-            a = clamp(t / 0.3) * clamp((2.6 - t) / 0.4)
+        if t < 2.2:
+            a = clamp(t / 0.3) * clamp((2.2 - t) / 0.4)
             paste_center(frame, self.hook, W / 2, 140, 1.0, a)
         # counter panel above the cucumber
         app = ease_out(t / 0.45)
@@ -915,9 +929,9 @@ def main():
             rd.frame(t, int(t * FPS)).save(os.path.join(pdir, f"f_{t:05.2f}.png"))
             print("preview", t, flush=True)
         return
-    wav = os.path.join(OUT_DIR, "_audio.wav")
+    wav = os.path.join(OUT_DIR, f"_audio_{LANG}.wav")
     make_audio(wav)
-    out = os.path.join(OUT_DIR, "cucumber_slicing_short.mp4")
+    out = os.path.join(OUT_DIR, f"cucumber_slicing_short_{LANG}.mp4")
     nframes = int(DUR * FPS)
     cmd = ["ffmpeg", "-y", "-loglevel", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", f"{W}x{H}",
            "-r", str(FPS), "-i", "-", "-i", wav, "-c:v", "libx264", "-preset", "medium", "-crf", "18",
