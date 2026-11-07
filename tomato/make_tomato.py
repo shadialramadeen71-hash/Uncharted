@@ -697,7 +697,7 @@ class Renderer:
 
     def draw_ui(self, frame, t):
         if t < 2.2:
-            paste_center(frame, self.hook, W / 2, 140, 1.0, clamp(t / 0.3) * clamp((2.2 - t) / 0.4))
+            paste_center(frame, self.hook, W / 2, 200, 1.0, clamp(t / 0.3) * clamp((2.2 - t) / 0.4))
         app = ease_out(t / 0.45)
         cy_ = 470 - (1 - app) * 80
         panel = Image.new("RGBA", (W, H), (0, 0, 0, 0))
@@ -720,9 +720,9 @@ class Renderer:
         if t > T_BANNER:
             p = (t - T_BANNER) / 0.45
             s = 0.4 + 0.6 * ease_out(p) + (0.08 * math.sin(p * math.pi) if p < 1 else 0)
-            paste_center(frame, self.banner, W / 2, 1610, s, clamp(p * 2))
+            paste_center(frame, self.banner, W / 2, 890, s, clamp(p * 2))
             if t > T_BANNER + 0.35:
-                paste_center(frame, self.sub, W / 2, 1765, 1.0, clamp((t - T_BANNER - 0.35) / 0.3))
+                paste_center(frame, self.sub, W / 2, 1030, 1.0, clamp((t - T_BANNER - 0.35) / 0.3))
 
 
 # ================================================================ audio
